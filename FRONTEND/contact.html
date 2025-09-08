@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us | JalRakshak 1.0</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background: url('nature2.jpg') no-repeat center center; 
+      background-size: cover; 
+    }
+    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
+    /* Optional: overlay for readability */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255,255,255,0.6); /* white transparent overlay */
+      z-index: 0;
+    }
+    main, nav, footer {
+      position: relative;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col relative">
+
+  <!-- Overlay -->
+  <div class="overlay"></div>
+
+  <!-- Navbar -->
+  <nav class="flex items-center justify-between px-8 py-4 shadow-md bg-white bg-opacity-90">
+    <div class="flex items-center space-x-3">
+      <img src="logo.jpeg" alt="JalRakshak Logo" class="w-12 h-12 rounded">
+      <span class="text-2xl font-bold text-green-600">JalRakshak 1.0</span>
+    </div>
+    <div class="space-x-3">
+      <a href="index.html" class="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition">← Back to Home</a>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="flex-1 p-6 flex flex-col items-center">
+    <h1 class="text-3xl font-bold text-green-700 mb-6">Contact Us</h1>
+    <p class="text-gray-700 text-center max-w-2xl mb-8">
+      Have questions, feedback, or want to collaborate?  
+      Fill out the form below and our team will get back to you soon.  
+    </p>
+
+    <!-- Contact Form -->
+    <form id="contactForm" class="w-full max-w-2xl bg-white bg-opacity-90 p-8 rounded-2xl shadow space-y-6">
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Your Name</label>
+        <input type="text" id="name" required class="w-full mt-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Enter your name">
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Email Address</label>
+        <input type="email" id="email" required class="w-full mt-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Enter your email">
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Message</label>
+        <textarea id="message" required rows="5" class="w-full mt-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Type your message"></textarea>
+      </div>
+
+      <div class="flex justify-center">
+        <button type="submit" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">Send Message</button>
+      </div>
+    </form>
+
+    <!-- Response Message -->
+    <div id="formResponse" class="mt-6 hidden text-center text-lg font-semibold"></div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 bg-opacity-90 text-gray-300 text-center py-6 mt-6">
+    <p>&copy; 2025 JalRakshak 1.0 | Built with 💧 & 🌱</p>
+  </footer>
+
+  <script src="js/contact.js"></script>
+</body>
+</html>
