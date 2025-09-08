@@ -1,0 +1,17 @@
+# Ignore environment files
+.env
+BACKEND/.env
+FRONTEND/.env
+
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+logs
+*.log
