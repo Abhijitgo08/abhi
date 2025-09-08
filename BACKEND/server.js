@@ -56,12 +56,34 @@ const start = async () => {
     });
 
     // increase timeouts to avoid Render LB 502s for long requests
-    server.keepAliveTimeout = 120000; // 120s
-    server.headersTimeout   = 120000; // 120s
+    server.keepAliveTimeout = 180000;
+    server.headersTimeout   = 180000;
+ // 120s
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);
   }
 };
+// crash / promise handlers (helps surface fatal errors in Render logs)
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION', err && err.stack ? err.stack : err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION', err && err.stack ? err.stack : err);
+  process.exit(1); // allow crash & restart so Render shows it
+});
+
+// optional: light debug route for runtime info
+app.get('/debug', (req, res) => {
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    pid: process.pid,
+    envPORT: process.env.PORT,
+    mem: process.memoryUsage(),
+    now: Date.now()
+  });
+});
+
 
 start();
