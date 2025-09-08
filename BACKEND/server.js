@@ -12,8 +12,8 @@ app.use(express.json());
 
 // ===== Connect Database =====
 connectDB(); // uses process.env.MONGO_URI from Render env or local .env
-
 // ===== API Routes (register BEFORE listening) =====
+app.use(cors());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rainfall', require('./routes/rainfallRoutes'));
 app.use('/api/calc', require('./routes/calcRoutes'));
