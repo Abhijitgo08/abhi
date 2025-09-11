@@ -229,18 +229,47 @@ async function generatePDF(reportData) {
   });
 
   // Try to include map snapshot (best-effort). This may fail due to CORS on tile images.
-  try {
-    const mapEl = document.getElementById("map");
-    // capture map container as image
-    const canvas = await html2canvas(mapEl, { useCORS: true, allowTaint: true, logging: false, scale: 1.2 });
-    const imgData = canvas.toDataURL("image/png");
-    // add below text
-    if (y + 260 > 840) { doc.addPage(); y = 40; }
-    doc.addImage(imgData, "PNG", 40, y, 500, 260);
-  } catch (err) {
-    console.warn("Map snapshot failed (CORS likely). PDF will include text only.", err);
-    // continue — text already added
+  // ===== CONFIG =====
+// For local testing use 'http://localhost:10000' (or whichever port your server runs on).
+// For production / same-origin (Render) use '' so it calls relative paths like /api/calc.
+const API_BASE = (location.hostname === 'localhost') ? 'http://localhost:10000' : ''; 
+
+// ...existing code...
+
+// Inside analyzeBtn click handler replace the fetch block with this:
+try {
+  const url = API_BASE + '/api/calc'; // relative on production, http://localhost:10000 for local dev
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`
+    },
+    body: JSON.stringify({ district, dwellers, roofType, roofArea })
+  });
+
+  // parse JSON safely
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no JSON returned */ }
+
+  if (!res.ok) {
+    // server returned non-2xx — show useful message
+    const serverMsg = data?.message || data?.msg || data?.error || JSON.stringify(data) || `Status ${res.status}`;
+    analysisResult.innerHTML = `<p class="text-red-600">❌ ${serverMsg}</p>`;
+    return;
   }
+
+  if (!data || !data.success) {
+    analysisResult.innerHTML = `<p class="text-red-600">❌ ${data?.message || data?.msg || 'Calculation failed'}</p>`;
+    return;
+  }
+
+  // ... proceed with rendering results (existing code) ...
+} catch (err) {
+  console.error('Fetch error:', err);
+  analysisResult.innerHTML = `<p class="text-red-600">❌ Error: Could not connect to server — ${err.message}</p>`;
+}
+
 
   // Footer
   doc.setFontSize(9);

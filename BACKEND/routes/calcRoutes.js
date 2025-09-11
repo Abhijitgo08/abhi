@@ -32,9 +32,8 @@ router.post("/", (req, res) => {
 
     // Runoff coefficients (rough values)
     const runoffCoeff = {
-      flat: 0.8,
-      sloped: 0.7,
-      tiled: 0.6
+      flat: 0.6,
+      sloped: 0.9,
     };
 
     const coeff = runoffCoeff[roofType.toLowerCase()] || 0.75;
