@@ -32,8 +32,8 @@ router.post("/", (req, res) => {
 
     // Runoff coefficients (rough values)
     const runoffCoeff = {
-      flat: 0.6,
-      sloped: 0.9,
+      Concrete: 0.6,
+      Metal: 0.9,
     };
 
     const coeff = runoffCoeff[roofType.toLowerCase()] || 0.75;
@@ -42,10 +42,10 @@ router.post("/", (req, res) => {
     const litersPerYear = roofArea * (rainfall_mm / 1000) * 1000 * coeff;
 
     // Estimate cost (very rough model: ₹1200 per m² roof area)
-    const estimatedCost = roofArea * 1200;
+    const estimatedCost = roofArea * 800;
 
     // Family need: 100 liters/day per person
-    const annualNeed = dwellers * 100 * 365;
+    const annualNeed = dwellers * 85 * 365;
 
     const sufficiencyMonths = Math.round(litersPerYear / (dwellers * 100 * 30));
 
@@ -57,7 +57,7 @@ router.post("/", (req, res) => {
       litersPerYear: Math.round(litersPerYear),
       estimatedCost,
       sufficiencyMonths,
-      suggestion: litersPerYear > annualNeed
+      suggestion: litersPerYear > annualNeed 
         ? "Build Storage Tank + Recharge Pit"
         : "Consider Recharge Pit with supplemental sources"
     });
