@@ -121,14 +121,15 @@ analyzeBtn.addEventListener("click", async () => {
   const roofArea = window.selectedRoofArea;
 
   try {
-    const res = await fetch("http://localhost:5000/api/calc", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      },
-      body: JSON.stringify({ district, dwellers, roofType, roofArea })
-    });
+   const url = API_BASE + '/api/calc';
+  const res = await fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${localStorage.getItem("token")}`
+  },
+  body: JSON.stringify({ district, dwellers, roofType, roofArea })
+});
 
     const data = await res.json();
 
