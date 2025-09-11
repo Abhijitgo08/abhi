@@ -42,7 +42,7 @@ router.post("/", (req, res) => {
     const litersPerYear = roofArea * (rainfall_mm / 1000) * 1000 * coeff;
 
     // Estimate cost (very rough model: ₹1200 per m² roof area)
-    const estimatedCost = roofArea * 30;
+    const estimatedCost = roofArea * 200;
 
     // Family need: 100 liters/day per person
     const annualNeed = dwellers * 85 * 365;
