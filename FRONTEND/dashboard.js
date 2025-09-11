@@ -6,6 +6,12 @@ const outputCard = document.getElementById("outputCard");
 const userName = document.getElementById("userName");
 const roofAreaSpan = document.getElementById("roofArea");
 
+// ===== CONFIG =====
+const API_BASE = (location.hostname === 'localhost')
+  ? 'http://localhost:10000'   // local dev port
+  : '';                        // same-origin in production
+
+
 // Protect dashboard
 const token = localStorage.getItem("token");
 if (!token) window.location.href = "auth.html";
