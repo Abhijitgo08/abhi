@@ -168,7 +168,7 @@ analyzeBtn.addEventListener("click", async () => {
       <p class="mt-2">📅 Covers 
         <span class="font-bold">${data.sufficiencyMonths} months</span> of family needs</p>
       <p class="mt-2">🏙 Equivalent to water for 
-        <span class="font-bold">${Math.round(data.litersPerYear / 50000)} households</span></p>
+        <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
       <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
         <button id="downloadReportBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
           Download Technical Report (PDF)

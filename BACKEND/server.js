@@ -10,8 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ===== Connect Database =====
-connectDB(); // connects using process.env.MONGO_URI
 
 // ===== API Routes (register BEFORE listening) =====
 app.use('/api/auth', require('./routes/auth'));
@@ -41,6 +39,13 @@ app.get(/.*/, (req, res) => {
     }
   });
 });
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.originalUrl);
+  next();
+});
+app.use(cors());
+app.options('*', cors());
+
 
 // ===== Start server =====
 // safe start: use Render's PORT, bind to 0.0.0.0, and increase timeouts
