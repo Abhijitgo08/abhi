@@ -167,24 +167,27 @@ analyzeBtn.addEventListener("click", async () => {
       <p class="mt-1 text-gray-700">Estimated Cost: ₹${data.estimatedCost.toLocaleString()}</p>
     `;
 
-    outputCard.classList.remove("hidden");
-    outputCard.innerHTML = `
-      <p class="text-lg font-medium">💧 You can save 
-        <span class="font-bold text-green-700">${data.litersPerYear.toLocaleString()} Liters/year</span>
-      </p>
-      <p class="mt-2">📅 Covers 
-        <span class="font-bold">${data.sufficiencyMonths} months</span> of family needs</p>
-      <p class="mt-2">🏙 Equivalent to water for 
-        <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
-      <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
-        <button id="downloadReportBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
-          Download Technical Report (PDF)
-        </button>
-        <button id="govtDocsBtn" class="bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 transition">
-          📑 Govt Documentation Checklist
-        </button>
-      </div>
-    `;
+    ooutputCard.classList.remove("hidden");
+outputCard.innerHTML = `
+  <p class="text-lg font-medium">💧 You can save 
+    <span class="font-bold text-green-700">${data.litersPerYear.toLocaleString()} Liters/year</span>
+  </p>
+  <p class="mt-2">📅 Covers 
+    <span class="font-bold">${data.sufficiencyMonths} months</span> of family needs</p>
+  <p class="mt-2">🏙 Equivalent to water for 
+    <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
+  <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
+    <button id="downloadReportBtn" 
+      class="no-pdf bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
+      Download Technical Report (PDF)
+    </button>
+    <button id="govtDocsBtn" 
+      class="no-pdf bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 transition">
+      📑 Govt Documentation Checklist
+    </button>
+  </div>
+`;
+
 
     // wire download button
     document.getElementById("downloadReportBtn").addEventListener("click", async () => {
@@ -216,6 +219,40 @@ async function generatePDF(reportData) {
     return;
   }
 
+  // --- Elements to hide during capture ---
+  const selectorsToHide = [
+    'nav',
+    'footer',
+    '.leaflet-control-container',
+    '.leaflet-control',
+    '.no-pdf',
+    '[data-pdf-hide]'
+  ];
+  const elementsHidden = [];
+  // helper to hide and record previous inline display/visibility
+  function hideEl(el) {
+    if (!el) return;
+    elementsHidden.push(el);
+    el.dataset._prevDisplay = el.style.display || '';
+    el.dataset._prevVisibility = el.style.visibility || '';
+    el.style.display = 'none';
+    el.style.visibility = 'hidden';
+  }
+
+  // hide by selector
+  selectorsToHide.forEach(sel => {
+    document.querySelectorAll(sel).forEach(hideEl);
+  });
+
+  // Specifically hide buttons inside #outputCard (covers dynamically injected buttons)
+  const outputCard = document.getElementById("outputCard");
+  const outputButtons = outputCard ? Array.from(outputCard.querySelectorAll("button")) : [];
+  outputButtons.forEach(hideEl);
+
+  // Also hide any element explicitly marked via "no-pdf" class added later (defensive)
+  document.querySelectorAll('.no-pdf').forEach(hideEl);
+
+  // Now proceed with PDF creation
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
@@ -223,77 +260,71 @@ async function generatePDF(reportData) {
   const margin = 40;
   let cursorY = 48;
 
-  // Header
-  doc.setFontSize(18);
-  doc.text("JalRakshak — Technical Report", margin, cursorY);
-  cursorY += 20;
-  doc.setFontSize(11);
+  try {
+    // Header
+    doc.setFontSize(18);
+    doc.text("JalRakshak — Technical Report", margin, cursorY);
+    cursorY += 20;
+    doc.setFontSize(11);
 
-  // Meta lines
-  const user = localStorage.getItem("userName") || "User";
-  const metaLines = [
-    `Prepared for: ${user}`,
-    `District: ${reportData.district || "N/A"}`,
-    `Roof Area (m²): ${window.selectedRoofArea || "N/A"}`,
-    `Roof Type: ${reportData.roofType || "N/A"}`,
-    `Dwellers: ${reportData.dwellers || "N/A"}`,
-    `Annual Rainfall used: ${reportData.rainfall_mm || "N/A"} mm`,
-    `Potential harvest: ${reportData.litersPerYear ? reportData.litersPerYear.toLocaleString() + " litres/year" : "N/A"}`,
-    `Estimated cost: ${reportData.estimatedCost ? "₹" + reportData.estimatedCost.toLocaleString() : "N/A"}`,
-    `Water sufficiency: ${reportData.sufficiencyMonths || "N/A"} months`,
-    `Suggestion: ${reportData.suggestion || "N/A"}`
-  ];
+    // Meta lines
+    const user = localStorage.getItem("userName") || "User";
+    const metaLines = [
+      `Prepared for: ${user}`,
+      `District: ${reportData.district || "N/A"}`,
+      `Roof Area (m²): ${window.selectedRoofArea || "N/A"}`,
+      `Roof Type: ${reportData.roofType || "N/A"}`,
+      `Dwellers: ${reportData.dwellers || "N/A"}`,
+      `Annual Rainfall used: ${reportData.rainfall_mm || "N/A"} mm`,
+      `Potential harvest: ${reportData.litersPerYear ? reportData.litersPerYear.toLocaleString() + " litres/year" : "N/A"}`,
+      `Estimated cost: ${reportData.estimatedCost ? "₹" + reportData.estimatedCost.toLocaleString() : "N/A"}`,
+      `Water sufficiency: ${reportData.sufficiencyMonths || "N/A"} months`,
+      `Suggestion: ${reportData.suggestion || "N/A"}`
+    ];
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  for (const ln of metaLines) {
-    if (cursorY > pageH - 120) { doc.addPage(); cursorY = 48; }
-    doc.text(ln, margin, cursorY);
-    cursorY += 16;
-  }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    for (const ln of metaLines) {
+      if (cursorY > pageH - 120) { doc.addPage(); cursorY = 48; }
+      doc.text(ln, margin, cursorY);
+      cursorY += 16;
+    }
 
-  // Try to capture map and outputCard using html2canvas
-  // If capturing the map fails (tainted canvas) we catch and continue with a text-only PDF
-  const mapEl = document.getElementById("map");
-  const outputEl = document.getElementById("outputCard");
+    // Try to capture map and outputCard using html2canvas
+    const mapEl = document.getElementById("map");
+    const outputEl = document.getElementById("outputCard");
 
-  async function captureElementToDataURL(el, scale = 1) {
-    if (!el) return null;
-    // html2canvas options: try moderate scale to keep canvas sized reasonably
-    const canvas = await html2canvas(el, { scale: scale, useCORS: true, logging: false, backgroundColor: null });
-    // try toDataURL — this can throw if canvas is tainted
+    async function captureElementToDataURL(el, scale = 1) {
+      if (!el) return null;
+      const canvas = await html2canvas(el, { scale: scale, useCORS: true, logging: false, backgroundColor: null });
+      try {
+        return canvas.toDataURL("image/png");
+      } catch (err) {
+        console.warn("Canvas toDataURL failed (likely CORS/taint):", err);
+        throw err;
+      }
+    }
+
+    let mapDataUrl = null;
+    let outputDataUrl = null;
+
     try {
-      return canvas.toDataURL("image/png");
-    } catch (err) {
-      console.warn("Canvas toDataURL failed (likely CORS/taint):", err);
-      throw err;
+      if (mapEl) {
+        mapDataUrl = await captureElementToDataURL(mapEl, 1.5);
+        console.log("Map captured successfully");
+      }
+      if (outputEl) {
+        outputDataUrl = await captureElementToDataURL(outputEl, 1.5);
+        console.log("Output card captured successfully");
+      }
+    } catch (captureErr) {
+      console.warn("Element capture failed. Will generate PDF without map/image. Error:", captureErr);
+      // continue with a text-only PDF
     }
-  }
 
-  let mapDataUrl = null;
-  let outputDataUrl = null;
-
-  try {
-    if (mapEl) {
-      // scale 1.5 to improve resolution but not too large
-      mapDataUrl = await captureElementToDataURL(mapEl, 1.5);
-      console.log("Map captured successfully");
-    }
-    if (outputEl) {
-      outputDataUrl = await captureElementToDataURL(outputEl, 1.5);
-      console.log("Output card captured successfully");
-    }
-  } catch (captureErr) {
-    // Common failure: SecurityError: The canvas has been tainted by cross-origin data
-    console.warn("Element capture failed. Will generate PDF without map/image. Error:", captureErr);
-    // proceed — mapDataUrl/outputDataUrl may be null
-  }
-
-  // If we have a map image, add it (fit to width with aspect)
-  try {
+    // Add map image if available
     if (mapDataUrl) {
-      // Load image into an Image object to read natural size
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
           const maxW = pageW - margin * 2;
@@ -308,17 +339,13 @@ async function generatePDF(reportData) {
         };
         img.onerror = (e) => {
           console.warn("Failed to load captured map image into Image object", e);
-          resolve(); // don't block PDF creation
+          resolve();
         };
         img.src = mapDataUrl;
       });
     }
-  } catch (err) {
-    console.warn("Inserting map image into PDF failed:", err);
-  }
 
-  // Add output card image if available
-  try {
+    // Add output card image if available
     if (outputDataUrl) {
       await new Promise((resolve) => {
         const img = new Image();
@@ -337,22 +364,28 @@ async function generatePDF(reportData) {
         img.src = outputDataUrl;
       });
     }
-  } catch (err) {
-    console.warn("Inserting output image into PDF failed:", err);
-  }
 
-  // Footer & save
-  doc.setFontSize(9);
-  doc.text("Generated by JalRakshak 1.0", margin, pageH - 28);
+    // Footer & save
+    doc.setFontSize(9);
+    doc.text("Generated by JalRakshak 1.0", margin, pageH - 28);
 
-  const districtSafe = (reportData.district || "report").replace(/[^\w\-]/g, "_");
-  const filename = `JalRakshak_Report_${districtSafe}.pdf`;
-  try {
+    const districtSafe = (reportData.district || "report").replace(/[^\w\-]/g, "_");
+    const filename = `JalRakshak_Report_${districtSafe}.pdf`;
     doc.save(filename);
     console.log("PDF saved:", filename);
+
   } catch (err) {
-    console.error("Failed to save PDF:", err);
+    console.error("Failed to generate PDF:", err);
     alert("PDF generation failed. See console for details.");
+  } finally {
+    // restore hidden elements
+    elementsHidden.forEach(el => {
+      try {
+        el.style.display = el.dataset._prevDisplay || '';
+        el.style.visibility = el.dataset._prevVisibility || '';
+        delete el.dataset._prevDisplay;
+        delete el.dataset._prevVisibility;
+      } catch (e) { /* ignore restore errors */ }
+    });
   }
-  
 }
