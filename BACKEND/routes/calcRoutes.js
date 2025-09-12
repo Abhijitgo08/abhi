@@ -29,7 +29,8 @@ router.post("/", (req, res) => {
       return res.status(404).json({ success: false, message: "District not found in dataset" });
     }
     const DEFAULT_RAINFALL = 1000;
-    const rainfall_ = rainfallEntry ? rainfallEntry.rainfall : DEFAULT_RAINFALL;
+    
+    const rainfall_mm = rainfallEntry ? rainfallEntry.rainfall : DEFAULT_RAINFALL;
     
 
     // Runoff coefficients (rough values)
