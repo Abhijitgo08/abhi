@@ -14,50 +14,78 @@ function getRainfallByDistrict(districtName) {
   );
 }
 
-// POST /api/calc
+// Default rainfall if district not found
+const DEFAULT_RAINFALL = 1000;
+
+// POST /
 router.post("/", (req, res) => {
   try {
-    const { district, roofArea, roofType, dwellers } = req.body;
+    // read and normalize inputs
+    let { district, roofArea, roofType, dwellers } = req.body;
 
-    if (!district || !roofArea || !roofType || !dwellers) {
+    // basic presence check
+    if (!district || roofArea === undefined || !roofType || dwellers === undefined) {
       return res.status(400).json({ success: false, message: "Missing input fields" });
     }
 
-    const rainfallEntry = getRainfallByDistrict(district);
-    if (!rainfallEntry) {
-      return res.status(404).json({ success: false, message: "District not found in dataset" });
+    // coerce to numbers and validate
+    roofArea = Number(roofArea);
+    dwellers = Number(dwellers);
+
+    if (Number.isNaN(roofArea) || roofArea <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid roofArea (must be > 0)" });
     }
 
-    const rainfall_mm = rainfallEntry.rainfall_mm;
+    // require non-negative integer for dwellers (0 allowed if you want)
+    if (!Number.isInteger(dwellers) || dwellers < 0) {
+      return res.status(400).json({ success: false, message: "Invalid dwellers (must be non-negative integer)" });
+    }
 
-    // Runoff coefficients (rough values)
+    // lookup rainfall (case-insensitive)
+    const rainfallEntry = getRainfallByDistrict(district || "");
+    // use dataset value if found, otherwise fallback to default
+    const rainfall_mm = rainfallEntry ? rainfallEntry.rainfall : DEFAULT_RAINFALL;
+
+    // runoff coefficients: use lowercase keys for easier matching
     const runoffCoeff = {
-      Concrete: 0.6,
-      Metal: 0.9,
+      concrete: 0.6,
+      metal: 0.9,
+      // add more types as needed
+      // tiled, thatch, etc.
     };
 
-    const coeff = runoffCoeff[roofType.toLowerCase()] || 0.75;
+    // get coefficient (case-insensitive). default to 0.75 if unknown
+    const coeff = runoffCoeff[(roofType || "").toLowerCase()] ?? 0.75;
 
     // Core calculation
+    // litersPerYear = roofArea(m²) * rainfall(m) * 1000(L/m³) * coeff
+    // rainfall_mm / 1000 converts mm -> m
     const litersPerYear = roofArea * (rainfall_mm / 1000) * 1000 * coeff;
 
-    // Estimate cost (very rough model: ₹1200 per m² roof area)
-    const estimatedCost = roofArea * 200;
+    // rough cost model (you used 200 earlier; keep or change)
+    const estimatedCost = Math.round(roofArea * 200);
 
-    // Family need: 100 liters/day per person
-    const annualNeed = dwellers * 85 * 365;
+    // Family need: 85 liters/day per person (you used 85 in previous code)
+    const dailyPerPerson = 85;
+    const annualNeed = dwellers * dailyPerPerson * 365;
 
-    const sufficiencyMonths = Math.round(litersPerYear / (dwellers * 100 * 30));
+    // months of sufficiency: avoid divide by zero when dwellers === 0
+    const monthlyDemand = dwellers > 0 ? (dwellers * 100 * 30) : 1;
+    const sufficiencyMonths = Math.round(litersPerYear / monthlyDemand);
+
+    // If we fell back to default rainfall, add a note in response
+    const usedDefaultRainfall = !rainfallEntry;
 
     res.json({
       success: true,
       district,
+      usedDefaultRainfall,
       rainfall_mm,
       feasibility: litersPerYear > 10000 ? "YES" : "NO",
       litersPerYear: Math.round(litersPerYear),
       estimatedCost,
       sufficiencyMonths,
-      suggestion: litersPerYear > annualNeed 
+      suggestion: litersPerYear > annualNeed
         ? "Build Storage Tank + Recharge Pit"
         : "Consider Recharge Pit with supplemental sources"
     });
@@ -65,5 +93,3 @@ router.post("/", (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-module.exports = router;
