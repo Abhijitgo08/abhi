@@ -14,7 +14,6 @@ function getRainfallByDistrict(districtName) {
   );
 }
 
-
 // POST /api/calc
 router.post("/", (req, res) => {
   try {
@@ -28,10 +27,8 @@ router.post("/", (req, res) => {
     if (!rainfallEntry) {
       return res.status(404).json({ success: false, message: "District not found in dataset" });
     }
-    const DEFAULT_RAINFALL = 1000;
-    
-    const rainfall_mm = rainfallEntry ? rainfallEntry.rainfall : DEFAULT_RAINFALL;
-    
+
+    const rainfall_mm = rainfallEntry.rainfall_mm;
 
     // Runoff coefficients (rough values)
     const runoffCoeff = {
