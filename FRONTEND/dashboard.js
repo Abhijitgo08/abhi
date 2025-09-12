@@ -354,4 +354,49 @@ async function generatePDF(reportData) {
     console.error("Failed to save PDF:", err);
     alert("PDF generation failed. See console for details.");
   }
+  // small: prevent concurrent runs
+let _isGeneratingPDF = false;
+
+// small: debounce helper (tiny)
+function debounce(fn, wait = 700) {
+  let t = null;
+  return function (...args) {
+    const ctx = this;
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(ctx, args), wait);
+  };
+}
+
+// small: safe click handler that uses flag + calls generatePDF
+async function handleDownloadClick(reportData) {
+  if (_isGeneratingPDF) {
+    console.log("PDF generation already in progress — ignoring click.");
+    return;
+  }
+  _isGeneratingPDF = true;
+  try {
+    await generatePDF(reportData);
+  } finally {
+    _isGeneratingPDF = false;
+  }
+}
+const debouncedHandleDownloadClick = debounce(handleDownloadClick, 700);
+
+// minimal wiring function you call after output HTML inserted
+function wireDownloadButton(reportData) {
+  const btn = document.getElementById("downloadReportBtn");
+  if (!btn) return;
+  // mark so it gets hidden from PDF if using hide-for-pdf code
+  btn.classList.add("no-pdf");
+
+  // replace to remove previous listeners and re-acquire reference
+  const clone = btn.cloneNode(true);
+  btn.parentNode.replaceChild(clone, btn);
+
+  clone.addEventListener("click", (e) => {
+    e.preventDefault();
+    debouncedHandleDownloadClick(reportData);
+  });
+}
+
 }
