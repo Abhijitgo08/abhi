@@ -177,10 +177,10 @@ analyzeBtn.addEventListener("click", async () => {
       <p class="mt-2">🏙 Equivalent to water for 
         <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
       <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
-        <button id="downloadReportBtn" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
+        <button id="downloadReportBtn" class=" no-pdf bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
           Download Technical Report (PDF)
         </button>
-        <button id="govtDocsBtn" class="bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 transition">
+        <button id="govtDocsBtn" class="no-pdf bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 transition">
           📑 Govt Documentation Checklist
         </button>
       </div>
@@ -256,6 +256,10 @@ async function generatePDF(reportData) {
   // If capturing the map fails (tainted canvas) we catch and continue with a text-only PDF
   const mapEl = document.getElementById("map");
   const outputEl = document.getElementById("outputCard");
+  
+  // hide elements that should not appear in PDF  
+  const pdfHideEls = Array.from(document.querySelectorAll('.no-pdf'));
+  pdfHideEls.forEach(el => el.style.display = 'none');
 
   async function captureElementToDataURL(el, scale = 1) {
     if (!el) return null;
@@ -354,5 +358,7 @@ async function generatePDF(reportData) {
     console.error("Failed to save PDF:", err);
     alert("PDF generation failed. See console for details.");
   }
-  
+  // restore hidden elements
+ pdfHideEls.forEach(el => el.style.display = '');
+
 }
