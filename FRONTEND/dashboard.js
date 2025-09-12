@@ -235,11 +235,29 @@ async function generatePDF(reportData) {
     y += 18;
   });
 
-  // Try to include map snapshot (best-effort). This may fail due to CORS on tile images.
-  // ===== CONFIG =====
-// For local testing use 'http://localhost:10000' (or whichever port your server runs on).
-// For production / same-origin (Render) use '' so it calls relative paths like /api/calc.
-const API_BASE = (location.hostname === 'localhost') ? 'http://localhost:10000' : ''; 
+// ----------------- MAP SETUP -----------------
+const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap contributors",
+  maxZoom: 19,
+  crossOrigin: true
+}).addTo(map);
+
+// Try to auto-detect user location (no pin, no circle)
+map.locate({ setView: true, maxZoom: 16, watch: false });
+
+// If location found, just recenter (no marker)
+map.on('locationfound', (e) => {
+  map.setView(e.latlng, 16); // zoom a bit closer to user
+});
+
+// Optional: handle errors (if user blocks location)
+map.on('locationerror', (err) => {
+  console.warn("Geolocation failed:", err.message);
+  // fallback stays at default Pune
+});
+
 
 // ...existing code...
 

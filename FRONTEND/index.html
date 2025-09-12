@@ -1,147 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JalRakshak - Rainwater Harvesting</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-image: url('nature2.jpg'); /* ✅ Updated image */
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
-        }
-        h1, h2, h3 { font-family: 'Poppins', sans-serif; }
-        .backdrop-blur-nav {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-        .hero-overlay {
-            background-color: rgba(255, 255, 255, 0.75);
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
-            padding: 3rem;
-            border-radius: 1rem;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JalRakshak - Rainwater Harvesting</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background-image: url('back.jpeg');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+    }
+    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
+    .backdrop-blur-nav {
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .hero-overlay {
+      background-color: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      padding: 3rem;
+      border-radius: 1rem;
+    }
+  </style>
 </head>
 <body class="text-gray-900">
 
-
 <!-- Navbar -->
 <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 py-4 backdrop-blur-nav bg-white/30">
-    <a href="#" class="flex items-center space-x-3">
-        <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full">
-        <span class="text-2xl font-bold text-green-800">JalRakshak</span>
-    </a>
-    <div class="hidden md:flex space-x-6 items-center bg-green-600/20 px-6 py-3 rounded-full shadow-md backdrop-blur-md">
+  <a href="#" class="flex items-center space-x-3">
+    <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full">
+    <span class="text-2xl font-bold text-white">JalRakshak1.0</span>
+
+  </a>
+  <div class="hidden md:flex space-x-6 items-center bg-green-600/20 px-6 py-3 rounded-full shadow-md backdrop-blur-md">
     <a href="#" class="text-green-900 hover:text-green-700 font-medium transition duration-200">Home</a>
     <a href="#features" class="text-green-900 hover:text-green-700 font-medium transition duration-200">Features</a>
     <a href="#about" class="text-green-900 hover:text-green-700 font-medium transition duration-200">About</a>
     <a href="contact.html" class="text-green-900 hover:text-green-700 font-medium transition duration-200">Contact</a>
-    <a href="auth.html" class="bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition duration-200 shadow-md">
-        Get Started
+    <a href="schemes.html" class="bg-yellow-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-700 transition duration-200 shadow-md">
+      Govt Schemes
     </a>
-</div>
+    <a href="auth.html" class="bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition duration-200 shadow-md">
+      Get Started
+    </a>
+  </div>
 
-    <div class="md:hidden">
-        <button id="mobile-menu-button" class="text-green-800 focus:outline-none">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
-            </svg>
-        </button>
-    </div>
+  <div class="md:hidden">
+    <button id="mobile-menu-button" class="text-green-800 focus:outline-none">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+      </svg>
+    </button>
+  </div>
 </nav>
 
 <!-- Mobile Menu -->
 <div id="mobile-menu" class="hidden md:hidden fixed top-16 right-0 w-full bg-white/90 backdrop-blur-nav text-center py-4 space-y-2 z-40">
-    <a href="#" class="block py-2 text-green-800 hover:bg-green-100">Home</a>
-    <a href="#features" class="block py-2 text-green-800 hover:bg-green-100">Features</a>
-    <a href="#about" class="block py-2 text-green-800 hover:bg-green-100">About</a>
-    <a href="#contact" class="block py-2 text-green-800 hover:bg-green-100">Contact</a>
-    <a href="auth.html" class="block mx-auto w-3/4 bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition duration-200 shadow-md mt-4">
-        Get Started
-    </a>
+  <a href="#" class="block py-2 text-green-800 hover:bg-green-100">Home</a>
+  <a href="#features" class="block py-2 text-green-800 hover:bg-green-100">Features</a>
+  <a href="#about" class="block py-2 text-green-800 hover:bg-green-100">About</a>
+  <a href="#contact" class="block py-2 text-green-800 hover:bg-green-100">Contact</a>
+  <a href="schemes.html" class="block mx-auto w-3/4 bg-yellow-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-700 transition duration-200 shadow-md mt-2">
+    Govt Schemes
+  </a>
+  <a href="auth.html" class="block mx-auto w-3/4 bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition duration-200 shadow-md mt-2">
+    Get Started
+  </a>
 </div>
 
 <!-- Hero Section -->
 <section class="h-screen flex items-center justify-center relative">
-    <div class="text-center px-6 md:px-12 w-full max-w-4xl hero-overlay"
-         style="background-color: rgba(255, 255, 255, 0.55);">
-        <h1 class="text-4xl md:text-6xl font-bold text-green-900 leading-tight">
-            Nurture the Drop, <br /> Grow a Greener Tomorrow 🌿
-        </h1>
-        <p class="mt-6 text-lg md:text-xl text-gray-700 font-medium">
-            Our AI-powered platform helps you calculate rooftop capacity, estimate costs, and predict rainfall to build sustainable rainwater harvesting systems.
-        </p>
-        <div class="mt-8 flex justify-center space-x-4">
-            <a href="auth.html" class="bg-green-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-green-700 transition duration-200 shadow-lg">
-                Start Now
-            </a>
-            <a href="#about" class="bg-blue-600 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-blue-700 transition duration-200">
-                Learn More
-            </a>
-        </div>
+  <div class="text-center px-6 md:px-12 w-full max-w-4xl hero-overlay"
+       style="background-color: rgba(255, 255, 255, 0.55);">
+    <h1 class="text-4xl md:text-6xl font-bold text-green-900 leading-tight">
+      Nurture the Drop, <br /> Grow a Greener Tomorrow 🌿
+    </h1>
+    <p class="mt-6 text-lg md:text-xl text-gray-700 font-medium">
+      Our AI-powered platform helps you calculate rooftop capacity, estimate costs, and predict rainfall to build sustainable rainwater harvesting systems.
+    </p>
+    <div class="mt-8 flex justify-center space-x-4 flex-wrap gap-4">
+      <a href="auth.html" class="bg-green-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-green-700 transition duration-200 shadow-lg">
+        Start Now
+      </a>
+      <a href="#about" class="bg-blue-600 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-blue-700 transition duration-200">
+        Learn More
+      </a>
+      <a href="schemes.html" class="bg-yellow-600 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-yellow-700 transition duration-200">
+        Govt Schemes
+      </a>
     </div>
+  </div>
 </section>
 
-
-<!-- Features -->
 <!-- Features -->
 <section id="features" class="py-20 bg-green-50/40">
-    <div class="container mx-auto px-6">
-        <h2 class="text-4xl font-bold text-center text-green-800">Key Features</h2>
-        <div class="mt-12 grid md:grid-cols-3 gap-10 text-center">
-            
-            <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
-                <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="Rooftop Analysis Icon" class="w-16 h-16 mx-auto" />
-                <h3 class="mt-4 text-2xl font-semibold text-green-700">AI-Powered Rooftop Analysis</h3>
-                <p class="text-gray-800 mt-2">Upload a photo and let our AI model accurately calculate your rooftop area and slope to maximize water collection.</p>
-            </div>
-
-            <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
-                <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="Cost Estimation Icon" class="w-16 h-16 mx-auto" />
-                <h3 class="mt-4 text-2xl font-semibold text-green-700">Instant Cost Estimation</h3>
-                <p class="text-gray-800 mt-2">Get a detailed and transparent cost breakdown for pipes, tanks, and fittings for your customized rainwater system.</p>
-            </div>
-
-            <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
-                <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="Rain Prediction Icon" class="w-16 h-16 mx-auto" />
-                <h3 class="mt-4 text-2xl font-semibold text-green-700">Smart Water Savings Forecast</h3>
-                <p class="text-gray-800 mt-2">Our system uses local rainfall data to predict your annual water savings and break-even point for the investment.</p>
-            </div>
-            
-        </div>
+  <div class="container mx-auto px-6">
+    <h2 class="text-4xl font-bold text-center text-green-800">Key Features</h2>
+    <div class="mt-12 grid md:grid-cols-3 gap-10 text-center">
+      <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
+        <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="Rooftop Analysis Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">AI-Powered Rooftop Analysis</h3>
+        <p class="text-gray-800 mt-2">Upload a photo and let our AI model accurately calculate your rooftop area and slope to maximize water collection.</p>
+      </div>
+      <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
+        <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="Cost Estimation Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">Instant Cost Estimation</h3>
+        <p class="text-gray-800 mt-2">Get a detailed and transparent cost breakdown for pipes, tanks, and fittings for your customized rainwater system.</p>
+      </div>
+      <div class="p-8 bg-white/60 backdrop-blur-md rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 transform hover:scale-105">
+        <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="Rain Prediction Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">Smart Water Savings Forecast</h3>
+        <p class="text-gray-800 mt-2">Our system uses local rainfall data to predict your annual water savings and break-even point for the investment.</p>
+      </div>
     </div>
+  </div>
 </section>
-
 
 <!-- About -->
 <section id="about" class="py-20 bg-green-100/70">
-    <div class="container mx-auto px-6 text-center">
-        <h2 class="text-4xl font-bold text-green-800">About Our Mission</h2>
-        <p class="mt-6 max-w-3xl mx-auto text-gray-800 text-lg leading-relaxed bg-white/60 p-6 rounded-xl shadow-md">
-            JalRakshak is built on a mission to combat water scarcity and promote environmental sustainability. 
-            We believe that technology can empower individuals and communities to make a tangible impact on the planet, one drop at a time.
-        </p>
-    </div>
+  <div class="container mx-auto px-6 text-center">
+    <h2 class="text-4xl font-bold text-green-800">About Our Mission</h2>
+    <p class="mt-6 max-w-3xl mx-auto text-gray-800 text-lg leading-relaxed bg-white/60 p-6 rounded-xl shadow-md">
+      JalRakshak is built on a mission to combat water scarcity and promote environmental sustainability. 
+      We believe that technology can empower individuals and communities to make a tangible impact on the planet, one drop at a time.
+    </p>
+  </div>
 </section>
 
-<!-- Contact Modal (hidden by default) -->
+<!-- Contact Modal -->
 <div id="contactModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
   <div class="bg-white/95 rounded-xl shadow-lg p-8 w-full max-w-xl relative">
-    <!-- Close Button -->
     <button id="closeContact" class="absolute top-3 right-3 text-gray-600 hover:text-red-600 text-2xl">&times;</button>
-    
     <h2 class="text-3xl font-bold text-green-800 text-center">Get In Touch</h2>
-    <p class="mt-4 text-gray-700 text-center">
-      Have questions or want to partner with us? Fill out the form below and we’ll get back to you.
-    </p>
-    
+    <p class="mt-4 text-gray-700 text-center">Have questions or want to partner with us? Fill out the form below and we’ll get back to you.</p>
     <form action="#" method="POST" class="mt-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <input type="text" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-600 transition">
@@ -157,43 +154,9 @@
 
 <!-- Footer -->
 <footer class="bg-gray-900/90 text-gray-300 text-center py-6">
-    <p>&copy; 2025 JalRakshak | Built with <span class="text-green-500">💧</span> & <span class="text-green-500">🌱</span></p>
+  <p>Team JalRakshak 1.0</p>
 </footer>
 
-
-<!-- Scripts -->
-<script>
-    const mobileMenuButton = document.getElementById('mobile-menu-button');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const contactBtn = document.querySelectorAll('a[href="#contact"]');
-    const contactModal = document.getElementById('contactModal');
-    const closeContact = document.getElementById('closeContact');
-
-    // Mobile menu toggle
-    mobileMenuButton.addEventListener('click', () => {
-        mobileMenu.classList.toggle('hidden');
-    });
-
-    // Open contact modal
-    contactBtn.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            contactModal.classList.remove('hidden');
-        });
-    });
-
-    // Close contact modal
-    closeContact.addEventListener('click', () => {
-        contactModal.classList.add('hidden');
-    });
-
-    // Close when clicking outside modal
-    contactModal.addEventListener('click', (e) => {
-        if (e.target === contactModal) {
-            contactModal.classList.add('hidden');
-        }
-    });
-</script>
-
+<script src="index.js"></script>
 </body>
 </html>
