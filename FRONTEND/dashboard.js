@@ -204,103 +204,154 @@ analyzeBtn.addEventListener("click", async () => {
 
 // ----------------- PDF GENERATION -----------------
 async function generatePDF(reportData) {
-  // modern jsPDF UMD exposes window.jspdf
+  // Basic library checks
+  if (!window.jspdf) {
+    alert("PDF library (jsPDF) not loaded. Confirm jspdf script is included.");
+    console.error("jsPDF missing");
+    return;
+  }
+  if (!window.html2canvas) {
+    alert("html2canvas not loaded. Confirm html2canvas script is included.");
+    console.error("html2canvas missing");
+    return;
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  let cursorY = 48;
 
-  // Title
+  // Header
   doc.setFontSize(18);
-  doc.text("JalRakshak — Technical Report", 40, 50);
+  doc.text("JalRakshak — Technical Report", margin, cursorY);
+  cursorY += 20;
   doc.setFontSize(11);
-  let y = 80;
 
-  // Meta
+  // Meta lines
   const user = localStorage.getItem("userName") || "User";
-  const lines = [
+  const metaLines = [
     `Prepared for: ${user}`,
-    `District: ${reportData.district}`,
-    `Roof Area (m²): ${window.selectedRoofArea}`,
+    `District: ${reportData.district || "N/A"}`,
+    `Roof Area (m²): ${window.selectedRoofArea || "N/A"}`,
     `Roof Type: ${reportData.roofType || "N/A"}`,
     `Dwellers: ${reportData.dwellers || "N/A"}`,
-    `Annual Rainfall used: ${reportData.rainfall_mm} mm`,
-    `Potential harvest: ${reportData.litersPerYear.toLocaleString()} litres/year`,
-    `Estimated cost: ₹${reportData.estimatedCost.toLocaleString()}`,
-    `Water sufficiency: ${reportData.sufficiencyMonths} months`,
-    `Suggestion: ${reportData.suggestion}`
+    `Annual Rainfall used: ${reportData.rainfall_mm || "N/A"} mm`,
+    `Potential harvest: ${reportData.litersPerYear ? reportData.litersPerYear.toLocaleString() + " litres/year" : "N/A"}`,
+    `Estimated cost: ${reportData.estimatedCost ? "₹" + reportData.estimatedCost.toLocaleString() : "N/A"}`,
+    `Water sufficiency: ${reportData.sufficiencyMonths || "N/A"} months`,
+    `Suggestion: ${reportData.suggestion || "N/A"}`
   ];
 
-  lines.forEach((ln) => {
-    if (y > 740) { doc.addPage(); y = 40; }
-    doc.text(ln, 40, y);
-    y += 18;
-  });
-
-// ----------------- MAP SETUP -----------------
-const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap contributors",
-  maxZoom: 19,
-  crossOrigin: true
-}).addTo(map);
-
-// Try to auto-detect user location (no pin, no circle)
-map.locate({ setView: true, maxZoom: 16, watch: false });
-
-// If location found, just recenter (no marker)
-map.on('locationfound', (e) => {
-  map.setView(e.latlng, 16); // zoom a bit closer to user
-});
-
-// Optional: handle errors (if user blocks location)
-map.on('locationerror', (err) => {
-  console.warn("Geolocation failed:", err.message);
-  // fallback stays at default Pune
-});
-
-
-// ...existing code...
-
-// Inside analyzeBtn click handler replace the fetch block with this:
-try {
-  const url = API_BASE + '/api/calc'; // relative on production, http://localhost:10000 for local dev
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${localStorage.getItem("token")}`
-    },
-    body: JSON.stringify({ district, dwellers, roofType, roofArea })
-  });
-
-  // parse JSON safely
-  let data = null;
-  try { data = await res.json(); } catch (e) { /* no JSON returned */ }
-
-  if (!res.ok) {
-    // server returned non-2xx — show useful message
-    const serverMsg = data?.message || data?.msg || data?.error || JSON.stringify(data) || `Status ${res.status}`;
-    analysisResult.innerHTML = `<p class="text-red-600">❌ ${serverMsg}</p>`;
-    return;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  for (const ln of metaLines) {
+    if (cursorY > pageH - 120) { doc.addPage(); cursorY = 48; }
+    doc.text(ln, margin, cursorY);
+    cursorY += 16;
   }
 
-  if (!data || !data.success) {
-    analysisResult.innerHTML = `<p class="text-red-600">❌ ${data?.message || data?.msg || 'Calculation failed'}</p>`;
-    return;
+  // Try to capture map and outputCard using html2canvas
+  // If capturing the map fails (tainted canvas) we catch and continue with a text-only PDF
+  const mapEl = document.getElementById("map");
+  const outputEl = document.getElementById("outputCard");
+
+  async function captureElementToDataURL(el, scale = 1) {
+    if (!el) return null;
+    // html2canvas options: try moderate scale to keep canvas sized reasonably
+    const canvas = await html2canvas(el, { scale: scale, useCORS: true, logging: false, backgroundColor: null });
+    // try toDataURL — this can throw if canvas is tainted
+    try {
+      return canvas.toDataURL("image/png");
+    } catch (err) {
+      console.warn("Canvas toDataURL failed (likely CORS/taint):", err);
+      throw err;
+    }
   }
 
-  // ... proceed with rendering results (existing code) ...
-} catch (err) {
-  console.error('Fetch error:', err);
-  analysisResult.innerHTML = `<p class="text-red-600">❌ Error: Could not connect to server — ${err.message}</p>`;
-}
+  let mapDataUrl = null;
+  let outputDataUrl = null;
 
+  try {
+    if (mapEl) {
+      // scale 1.5 to improve resolution but not too large
+      mapDataUrl = await captureElementToDataURL(mapEl, 1.5);
+      console.log("Map captured successfully");
+    }
+    if (outputEl) {
+      outputDataUrl = await captureElementToDataURL(outputEl, 1.5);
+      console.log("Output card captured successfully");
+    }
+  } catch (captureErr) {
+    // Common failure: SecurityError: The canvas has been tainted by cross-origin data
+    console.warn("Element capture failed. Will generate PDF without map/image. Error:", captureErr);
+    // proceed — mapDataUrl/outputDataUrl may be null
+  }
 
-  // Footer
+  // If we have a map image, add it (fit to width with aspect)
+  try {
+    if (mapDataUrl) {
+      // Load image into an Image object to read natural size
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = pageW - margin * 2;
+          const maxH = pageH - cursorY - 80;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const drawW = img.width * ratio;
+          const drawH = img.height * ratio;
+          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
+          doc.addImage(mapDataUrl, "PNG", margin, cursorY, drawW, drawH);
+          cursorY += drawH + 12;
+          resolve();
+        };
+        img.onerror = (e) => {
+          console.warn("Failed to load captured map image into Image object", e);
+          resolve(); // don't block PDF creation
+        };
+        img.src = mapDataUrl;
+      });
+    }
+  } catch (err) {
+    console.warn("Inserting map image into PDF failed:", err);
+  }
+
+  // Add output card image if available
+  try {
+    if (outputDataUrl) {
+      await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = pageW - margin * 2;
+          const maxH = pageH - cursorY - 80;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const drawW = img.width * ratio;
+          const drawH = img.height * ratio;
+          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
+          doc.addImage(outputDataUrl, "PNG", margin, cursorY, drawW, drawH);
+          cursorY += drawH + 12;
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = outputDataUrl;
+      });
+    }
+  } catch (err) {
+    console.warn("Inserting output image into PDF failed:", err);
+  }
+
+  // Footer & save
   doc.setFontSize(9);
-  doc.text("Generated by JalRakshak 1.0", 40, doc.internal.pageSize.height - 30);
+  doc.text("Generated by JalRakshak 1.0", margin, pageH - 28);
 
-  // Save file
-  const filename = `JalRakshak_Report_${reportData.district || "report"}.pdf`;
-  doc.save(filename);
+  const districtSafe = (reportData.district || "report").replace(/[^\w\-]/g, "_");
+  const filename = `JalRakshak_Report_${districtSafe}.pdf`;
+  try {
+    doc.save(filename);
+    console.log("PDF saved:", filename);
+  } catch (err) {
+    console.error("Failed to save PDF:", err);
+    alert("PDF generation failed. See console for details.");
+  }
 }
