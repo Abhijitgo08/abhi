@@ -1,383 +1,506 @@
-// routes/location.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-const NodeCache = require('node-cache');
-const User = require('../models/User');
+// dashboard.js
+// Ready-to-paste. Uses your server routes:
+// GET  /api/location/options     -> { success:true, locationOptions: [...], chosenLocation: ... }
+// POST /api/location/choice      -> accepts { choice: {...} } and returns { success:true, chosenLocation: ... }
+// Also uses your existing /api/calc endpoint for analysis.
 
-const DEBUG = Boolean(process.env.DEBUG_LOCATION);
-const cache = new NodeCache({ stdTTL: Number(process.env.LOCATION_CACHE_TTL || 60 * 60) });
+// ----------------- ELEMENTS -----------------
+const analyzeBtn = document.getElementById("analyzeBtn");
+const analysisResult = document.getElementById("analysisResult");
+const designCard = document.getElementById("designCard");
+const outputCard = document.getElementById("outputCard");
+const userName = document.getElementById("userName");
+const roofAreaSpan = document.getElementById("roofArea");
 
-// dynamic fetch wrapper (works on Node 18+ or with node-fetch installed)
-let fetchFn;
-if (typeof globalThis.fetch === 'function') fetchFn = globalThis.fetch;
-else fetchFn = (...args) => import('node-fetch').then(m => m.default(...args));
-const fetch = (...args) => fetchFn(...args);
+// New elements for location dropdown (make sure your HTML replaced the old input with a select having id="locationSelect")
+const locationSelect = document.getElementById("locationSelect");
+const locationMeta = document.getElementById("locationMeta");
 
-/* ---------- helper: extract user id ---------- */
-function getUserIdFromReq(req) {
-  if (req.user && req.user.id) return String(req.user.id);
-  const hdr = req.headers['x-user-id'];
-  if (hdr) return String(hdr);
-  if (req.body && req.body.userId) return String(req.body.userId);
-  if (req.query && req.query.userId) return String(req.query.userId);
+// ===== CONFIG =====
+const API_BASE = (location.hostname === 'localhost')
+  ? 'http://localhost:10000'   // local dev port
+  : '';                        // same-origin in production
 
-  // optional: try Bearer token decode if JWT_SECRET and jsonwebtoken available
-  const auth = req.headers.authorization || req.headers.Authorization;
-  if (auth && auth.startsWith('Bearer ')) {
+// Protect dashboard
+const token = localStorage.getItem("token");
+if (!token) window.location.href = "auth.html";
+
+// User name
+userName.textContent = localStorage.getItem("userName") || "User";
+
+// ----------------- MAP SETUP -----------------
+// NOTE: add crossOrigin: true to tileLayer (helps html2canvas attempt)
+const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap contributors",
+  maxZoom: 19,
+  crossOrigin: true
+}).addTo(map);
+
+// Draw Control
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+const drawControl = new L.Control.Draw({
+  draw: {
+    polyline: false,
+    rectangle: false,
+    circle: false,
+    marker: false,
+    circlemarker: false,
+    polygon: { allowIntersection: false, showArea: true, showLength: false }
+  },
+  edit: { featureGroup: drawnItems }
+});
+map.addControl(drawControl);
+
+// Utility: convert Leaflet latlngs to GeoJSON polygon coordinates for turf
+function latlngsToTurfPolygon(latlngs) {
+  // latlngs is array of L.LatLng objects (single ring)
+  const coords = latlngs.map((p) => [p.lng, p.lat]);
+  // ensure closed ring
+  if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) {
+    coords.push(coords[0]);
+  }
+  return turf.polygon([coords]);
+}
+
+// When user creates polygon
+map.on(L.Draw.Event.CREATED, (e) => {
+  drawnItems.clearLayers(); // allow only one polygon at a time
+  const layer = e.layer;
+  drawnItems.addLayer(layer);
+
+  // get latlngs (first ring)
+  const latlngs = layer.getLatLngs()[0];
+  // convert and compute area via turf (returns m²)
+  try {
+    const poly = latlngsToTurfPolygon(latlngs);
+    const area = turf.area(poly); // m²
+    window.selectedRoofArea = Math.round(area);
+    roofAreaSpan.textContent = window.selectedRoofArea;
+  } catch (err) {
+    console.warn("Area calc failed, falling back to L.GeometryUtil if available", err);
+    // fallback: use L.GeometryUtil if present
+    if (L.GeometryUtil && typeof L.GeometryUtil.geodesicArea === "function") {
+      const fallback = L.GeometryUtil.geodesicArea(latlngs);
+      window.selectedRoofArea = Math.round(fallback);
+      roofAreaSpan.textContent = window.selectedRoofArea;
+    } else {
+      window.selectedRoofArea = 0;
+      roofAreaSpan.textContent = 0;
+    }
+  }
+});
+
+// If polygon edited, update area too
+map.on(L.Draw.Event.EDITED, (e) => {
+  const layers = e.layers;
+  layers.eachLayer((layer) => {
+    const latlngs = layer.getLatLngs()[0];
     try {
-      const jwt = require('jsonwebtoken');
-      const token = auth.slice(7).trim();
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      if (payload && (payload.id || payload.userId)) return String(payload.id || payload.userId);
-    } catch (e) {
-      if (DEBUG) console.debug('getUserIdFromReq: jwt verify failed', e.message);
+      const poly = latlngsToTurfPolygon(latlngs);
+      const area = turf.area(poly);
+      window.selectedRoofArea = Math.round(area);
+      roofAreaSpan.textContent = window.selectedRoofArea;
+    } catch (err) {
+      console.warn("Edited area calc fallback", err);
+      window.selectedRoofArea = window.selectedRoofArea || 0;
     }
-  }
-
-  return null;
-}
-
-/* ---------- Normalize options (accept lots of shapes) ---------- */
-function normalizeOptions(rawArr = []) {
-  if (!Array.isArray(rawArr)) return [];
-  return rawArr.map(o => {
-    const lat = Number(o.lat ?? o.latitude ?? (o.center && o.center.lat));
-    const lng = Number(o.lng ?? o.lon ?? o.longitude ?? (o.center && o.center.lon));
-    const distanceCandidate = o.distance_m ?? o.distance ?? o.dist ?? null;
-    const distance_m = distanceCandidate != null ? Number(distanceCandidate) : null;
-    return {
-      id: o.id || o.place_id || null,
-      lat: Number.isFinite(lat) ? lat : null,
-      lng: Number.isFinite(lng) ? lng : null,
-      // prefer structured address-like fields but fall back to name
-      address: o.address || o.display_name || o.name || null,
-      distance_m: Number.isFinite(distance_m) ? distance_m : null,
-      raw: o
-    };
-  }).filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
-}
-
-/* ---------- geometry helpers ---------- */
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = d => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat/2)**2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-function pointInPolygon(lat, lon, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].lon, yi = polygon[i].lat;
-    const xj = polygon[j].lon, yj = polygon[j].lat;
-    const intersect = ((yi > lat) !== (yj > lat)) &&
-      (lon < (xj - xi) * (lat - yi) / (yj - yi + 1e-12) + xi);
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function elementContainsPoint(el, lat, lon) {
-  if (Array.isArray(el.geometry) && el.geometry.length >= 3) {
-    return pointInPolygon(lat, lon, el.geometry);
-  }
-  return false;
-}
-
-/* ---------- Overpass geometry fetch (relations/ways) ---------- */
-async function overpassTalukasGeom(lat, lon, radiusMeters = 20000, adminLevels = [6,7,8]) {
-  const key = `talukas_geom:${lat.toFixed(5)},${lon.toFixed(5)},${radiusMeters},al${adminLevels.join('-')}`;
-  if (cache.has(key)) {
-    if (DEBUG) console.debug('overpass cache hit', key);
-    return cache.get(key);
-  }
-
-  const adminLevelFilters = adminLevels.map(l => `["admin_level"="${l}"]`).join('');
-  const q = `
-[out:json][timeout:60];
-(
-  relation(around:${radiusMeters},${lat},${lon})["boundary"="administrative"]${adminLevelFilters};
-  way(around:${radiusMeters},${lat},${lon})["boundary"="administrative"]${adminLevelFilters};
-);
-out geom tags;
-`;
-
-  try {
-    const resp = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: q });
-    if (!resp.ok) {
-      if (DEBUG) console.warn('overpass non-ok', resp.status);
-      return [];
-    }
-    const j = await resp.json();
-    if (!j.elements) return [];
-    const elems = j.elements.map(el => {
-      const tags = el.tags || {};
-      let plat = null, plon = null;
-      if (el.type === 'node') { plat = el.lat; plon = el.lon; }
-      else if (el.center) { plat = el.center.lat; plon = el.center.lon; }
-      else if (el.bounds) { plat = (el.bounds.minlat + el.bounds.maxlat) / 2; plon = (el.bounds.minlon + el.bounds.maxlon) / 2; }
-      return {
-        id: `${el.type}/${el.id}`,
-        name: tags.name || tags['name:en'] || '(unnamed)',
-        admin_level: tags.admin_level ? String(tags.admin_level) : null,
-        tags,
-        lat: plat, lon: plon,
-        geometry: Array.isArray(el.geometry) ? el.geometry.map(p => ({ lat: p.lat, lon: p.lon })) : null
-      };
-    }).filter(e => e.lat !== null || e.geometry);
-
-    cache.set(key, elems);
-    if (DEBUG) console.debug('overpass fetched', key, elems.length, 'elements');
-    return elems;
-  } catch (err) {
-    if (DEBUG) console.warn('Overpass geom error:', err && err.message);
-    return [];
-  }
-}
-
-/* ---------- POST /api/location/candidates (Overpass-powered) ---------- */
-router.post('/candidates', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const { latitude, longitude, accuracy, includeAdminLevels, maxRadius } = body;
-    const lat = Number(latitude), lon = Number(longitude);
-    if (!isFinite(lat) || !isFinite(lon)) return res.status(400).json({ success:false, message:"latitude & longitude required" });
-
-    const adminLevels = Array.isArray(includeAdminLevels) && includeAdminLevels.length
-      ? includeAdminLevels.map(Number).filter(n => !Number.isNaN(n))
-      : [6,7,8];
-
-    let baseRadius = isFinite(Number(accuracy)) ? Math.round(Number(accuracy)) : 2000;
-    baseRadius = Math.max(500, baseRadius);
-
-    const envMax = Number(process.env.MAX_RADIUS_METERS || 200000);
-    const bodyMax = Number.isFinite(Number(maxRadius)) ? Number(maxRadius) : NaN;
-    const maxRadiusAllowed = Number.isFinite(bodyMax) ? Math.max(baseRadius, bodyMax) : Math.max(baseRadius, envMax);
-
-    const degLat = baseRadius / 111000;
-    const degLon = baseRadius / (111000 * Math.cos(lat * Math.PI/180));
-
-    const probeFactor = 0.6;
-    const probes = [
-      { name: "center", dy: 0, dx: 0 },
-      { name: "N", dy: 1 * probeFactor, dx: 0 },
-      { name: "S", dy: -1 * probeFactor, dx: 0 },
-      { name: "E", dy: 0, dx: 1 * probeFactor },
-      { name: "W", dy: 0, dx: -1 * probeFactor },
-      { name: "NE", dy: 0.7071 * probeFactor, dx: 0.7071 * probeFactor },
-      { name: "NW", dy: 0.7071 * probeFactor, dx: -0.7071 * probeFactor },
-      { name: "SE", dy: -0.7071 * probeFactor, dx: 0.7071 * probeFactor },
-      { name: "SW", dy: -0.7071 * probeFactor, dx: -0.7071 * probeFactor }
-    ];
-
-    const selected = [];
-    const chosenIds = new Set();
-    const TARGET = Number(process.env.LOCATION_TARGET || 4);
-
-    for (const probe of probes) {
-      if (selected.length >= TARGET) break;
-
-      const platProbe = lat + probe.dy * degLat;
-      const plonProbe = lon + probe.dx * degLon;
-
-      const perProbeNearest = [];
-      let foundForProbe = null;
-
-      for (let k = 0; ; k++) {
-        const r = baseRadius * Math.pow(2, k);
-        if (r > maxRadiusAllowed) break;
-
-        const elems = await overpassTalukasGeom(platProbe, plonProbe, Math.round(r), adminLevels);
-        if (!Array.isArray(elems) || elems.length === 0) continue;
-
-        for (const el of elems) {
-          if (el.lat && el.lon) {
-            const dist = Math.round(haversine(lat, lon, el.lat, el.lon) || 0);
-            perProbeNearest.push({ id: el.id, name: el.name, admin_level: el.admin_level, tags: el.tags, lat: el.lat, lon: el.lon, distance_m: dist });
-          }
-        }
-
-        let containedCandidate = null;
-        for (const el of elems) {
-          if (el.geometry && el.geometry.length >= 3) {
-            try {
-              if (elementContainsPoint(el, lat, lon)) {
-                containedCandidate = el;
-                break;
-              }
-            } catch (e) { /* ignore geometry parse errors */ }
-          }
-        }
-
-        if (containedCandidate) {
-          if (!chosenIds.has(containedCandidate.id)) {
-            const dist = Math.round(haversine(lat, lon, containedCandidate.lat, containedCandidate.lon) || 0);
-            foundForProbe = { id: containedCandidate.id, name: containedCandidate.name, admin_level: containedCandidate.admin_level, tags: containedCandidate.tags, lat: containedCandidate.lat, lon: containedCandidate.lon, distance_m: dist, probe: probe.name, found_radius: Math.round(r) };
-            chosenIds.add(containedCandidate.id);
-          }
-          break;
-        }
-      } // end doubling
-
-      if (!foundForProbe) {
-        perProbeNearest.sort((a,b) => (a.distance_m||0) - (b.distance_m||0));
-        let pick = null;
-        for (const cand of perProbeNearest) {
-          if (!chosenIds.has(cand.id)) { pick = cand; break; }
-        }
-        if (!pick && perProbeNearest.length > 0) pick = perProbeNearest[0];
-        if (pick) {
-          foundForProbe = { ...pick, probe: probe.name, found_radius: null };
-          if (foundForProbe.id) chosenIds.add(foundForProbe.id);
-        }
-      }
-
-      if (foundForProbe) {
-        selected.push(foundForProbe);
-      }
-    } // end probes
-
-    selected.sort((a,b) => {
-      const a6 = a.admin_level === '6' ? 0 : 1;
-      const b6 = b.admin_level === '6' ? 0 : 1;
-      if (a6 !== b6) return a6 - b6;
-      return (a.distance_m || 0) - (b.distance_m || 0);
-    });
-
-    const final = selected.slice(0, TARGET);
-
-    return res.json({
-      success: true,
-      source: "overpass_talukas_8quadrant_faststop",
-      requested_center: { lat, lon, base_radius: baseRadius },
-      admin_levels_queried: adminLevels,
-      max_radius_allowed: maxRadiusAllowed,
-      returned_count: final.length,
-      talukas: final
-    });
-  } catch (err) {
-    if (DEBUG) console.error("candidates error:", err && err.message);
-    return res.status(500).json({ success:false, message: err && err.message });
-  }
+  });
 });
 
-/* ---------- POST /api/location/options ---------- */
-router.post('/options', async (req, res) => {
+// ----------------- LOCATION DROPDOWN (uses your /api/location endpoints) -----------------
+function showLocationMeta(loc) {
+  if (!locationMeta) return;
+  if (!loc) {
+    locationMeta.classList.add('hidden');
+    locationMeta.textContent = '';
+    return;
+  }
+  locationMeta.classList.remove('hidden');
+  locationMeta.textContent = `${loc.address || 'Unknown'} — lat: ${loc.lat ?? 'N/A'}, lng: ${loc.lng ?? 'N/A'}${loc.distance_m ? ' — ' + loc.distance_m + ' m' : ''}`;
+}
+
+// Load options from GET /api/location/options
+async function loadLocationOptions() {
+  if (!locationSelect) return;
   try {
-    if (DEBUG) {
-      console.debug('>>> /api/location/options headers:', {
-        authorization: req.headers.authorization,
-        'x-user-id': req.headers['x-user-id']
-      });
-      console.debug('>>> /api/location/options body (truncated):', JSON.stringify(req.body || {}).slice(0, 2000));
+    const res = await fetch(API_BASE + '/api/location/options', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!res.ok) {
+      console.warn('Failed to load locations, status', res.status);
+      locationSelect.innerHTML = '<option value="">Failed to load locations</option>';
+      return;
     }
 
-    const userId = getUserIdFromReq(req);
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      if (DEBUG) console.warn('POST /options invalid userId:', userId);
-      return res.status(400).json({ success:false, message:'valid userId required' });
-    }
+    const json = await res.json();
+    const options = (json && json.locationOptions) ? json.locationOptions : [];
 
-    const raw = Array.isArray(req.body.options) ? req.body.options : (req.body.locationOptions || []);
-    const options = normalizeOptions(raw);
     if (!options.length) {
-      if (DEBUG) console.warn('POST /options — normalizeOptions returned empty array. raw sample:', raw[0] || null);
-      return res.status(400).json({ success:false, message:'options must be a non-empty array with lat & lng' });
+      locationSelect.innerHTML = '<option value="">No saved locations</option>';
+      // if server returned chosenLocation separately, show it
+      if (json && json.chosenLocation) showLocationMeta(json.chosenLocation);
+      return;
     }
 
-    const doc = await User.findByIdAndUpdate(
-      userId,
-      { $set: { locationOptions: options, updatedAt: new Date() } },
-      { new: true, upsert: false }
-    ).lean();
+    // populate select
+    locationSelect.innerHTML = '<option value="">-- Select an address --</option>';
+    options.forEach((loc, idx) => {
+      const opt = document.createElement('option');
+      opt.value = loc.id || loc._id || idx;
+      opt.textContent = loc.address ? `${loc.address}` : `${loc.lat}, ${loc.lng}`;
+      opt.dataset.loc = JSON.stringify(loc);
+      locationSelect.appendChild(opt);
+    });
 
-    if (!doc) {
-      console.warn(`POST /api/location/options — user ${userId} not found`);
-      return res.status(404).json({ success: false, message: 'user not found', code: 'user_not_found' });
+    // Preselect server-chosen location if present
+    if (json && json.chosenLocation) {
+      const chosen = json.chosenLocation;
+      // attempt to find matching option by id or lat/lng
+      for (let i = 0; i < locationSelect.options.length; i++) {
+        const o = locationSelect.options[i];
+        if (!o.dataset.loc) continue;
+        try {
+          const L = JSON.parse(o.dataset.loc);
+          if ((chosen.id && L.id === chosen.id) || (Number(L.lat) === Number(chosen.lat) && Number(L.lng) === Number(chosen.lng))) {
+            locationSelect.selectedIndex = i;
+            showLocationMeta(L);
+            break;
+          }
+        } catch (e) { /* ignore parse errors */ }
+      }
     }
-
-    return res.json({ success: true, savedCount: options.length, locationOptions: doc.locationOptions });
   } catch (err) {
-    console.error('POST /api/location/options error:', err);
-    return res.status(500).json({ success:false, message: err.message });
+    console.error('Error loading locations', err);
+    if (locationSelect) locationSelect.innerHTML = '<option value="">Error loading locations</option>';
   }
-});
+}
+loadLocationOptions();
 
-/* ---------- GET /api/location/options ---------- */
-router.get('/options', async (req, res) => {
+if (locationSelect) {
+  locationSelect.addEventListener('change', async (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (!opt || !opt.dataset.loc || opt.value === '') {
+      showLocationMeta(null);
+      return;
+    }
+
+    const locObj = JSON.parse(opt.dataset.loc);
+    showLocationMeta(locObj);
+
+    try {
+      // POST /api/location/choice expects { choice: { lat, lng, ... } }
+      const res = await fetch(API_BASE + '/api/location/choice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ choice: locObj })
+      });
+
+      if (!res.ok) {
+        console.error('Failed to save chosenLocation', res.status);
+        // optional UI feedback
+        return;
+      }
+
+      const json = await res.json();
+      if (json && json.success) {
+        console.log('chosenLocation saved', json.chosenLocation);
+      } else {
+        console.warn('choice endpoint returned non-success', json);
+      }
+    } catch (err) {
+      console.error('Error saving chosenLocation', err);
+    }
+  });
+}
+
+// ----------------- ANALYSIS (call backend) -----------------
+analyzeBtn.addEventListener("click", async () => {
+  // Basic validation
+  if (!window.selectedRoofArea || window.selectedRoofArea <= 0) {
+    alert("Please draw your roof polygon on the map first!");
+    return;
+  }
+
+  analysisResult.classList.remove("hidden");
+  analysisResult.innerHTML = `<p class="text-lg text-gray-500">🔄 Running analysis...</p>`;
+
+  // Grab inputs from form (support both id names if present)
+  // Use selected location from dropdown for 'district' if available
+  let district = 'Pune';
+  if (locationSelect) {
+    const sel = locationSelect.selectedOptions[0];
+    if (sel && sel.dataset && sel.dataset.loc && sel.value !== '') {
+      try {
+        const loc = JSON.parse(sel.dataset.loc);
+        district = loc.address || loc.id || district;
+      } catch (err) {
+        console.warn('Could not parse selected location for district', err);
+      }
+    } else {
+      const maybeInput = document.getElementById("locationInput");
+      if (maybeInput && maybeInput.value) district = maybeInput.value.trim();
+    }
+  } else {
+    const maybeInput = document.getElementById("locationInput");
+    if (maybeInput && maybeInput.value) district = maybeInput.value.trim();
+  }
+
+  const dwellers = parseInt(document.getElementById("dwellersInput").value) || 4;
+  const roofTypeEl = document.getElementById("roofTypeInput") || document.getElementById("roofType");
+  const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : "flat";
+  const roofArea = window.selectedRoofArea;
+
   try {
-    const userId = getUserIdFromReq(req);
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ success:false, message:'valid userId required' });
+    const url = API_BASE + '/api/calc';
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ district, dwellers, roofType, roofArea })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      analysisResult.innerHTML = `<p class="text-red-600">❌ ${data.message || "Calculation failed"}</p>`;
+      return;
     }
 
-    const doc = await User.findById(userId).lean();
-    return res.json({ success: true, locationOptions: doc?.locationOptions || [], chosenLocation: doc?.chosenLocation || null });
+    // Show result summary
+    analysisResult.innerHTML = `
+      <p class="text-lg">Feasibility: 
+        <span class="font-bold ${data.feasibility === "YES" ? "text-green-600" : "text-red-600"}">
+          ${data.feasibility}
+        </span>
+      </p>
+      <p class="mt-2">Estimated Harvesting Capacity: 
+        <span class="font-bold">${data.litersPerYear.toLocaleString()} Liters/year</span>
+      </p>
+      <p class="mt-2">Estimated Cost: 
+        <span class="font-bold text-yellow-700">₹${data.estimatedCost.toLocaleString()}</span>
+      </p>
+      <p class="mt-2">Water Sufficiency: 
+        <span class="font-bold">${data.sufficiencyMonths} months</span>
+      </p>
+      <p class="mt-2">Suggestion: 
+        <span class="font-bold text-blue-600">${data.suggestion}</span>
+      </p>
+    `;
+
+    // design + impact
+    designCard.classList.remove("hidden");
+    designCard.innerHTML = `
+      <h3 class="text-xl font-semibold text-blue-600">Suggested Structure</h3>
+      <p class="mt-2 text-gray-700">${data.suggestion}</p>
+      <p class="mt-1 text-gray-700">Estimated Cost: ₹${data.estimatedCost.toLocaleString()}</p>
+    `;
+
+    outputCard.classList.remove("hidden");
+    outputCard.innerHTML = `
+      <p class="text-lg font-medium">💧 You can save 
+        <span class="font-bold text-green-700">${data.litersPerYear.toLocaleString()} Liters/year</span>
+      </p>
+      <p class="mt-2">📅 Covers 
+        <span class="font-bold">${data.sufficiencyMonths} months</span> of family needs</p>
+      <p class="mt-2">🏙 Equivalent to water for 
+        <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
+      <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
+        <button id="downloadReportBtn" class=" no-pdf bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
+          Download Technical Report (PDF)
+        </button>
+        <button id="govtDocsBtn" class="no-pdf bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 transition">
+          📑 Govt Documentation Checklist
+        </button>
+      </div>
+    `;
+
+    // wire download button
+    document.getElementById("downloadReportBtn").addEventListener("click", async () => {
+      await generatePDF(data);
+    });
+
+    // optional: show govt docs (simple modal or link) — for demo we'll alert
+    document.getElementById("govtDocsBtn").addEventListener("click", () => {
+      alert("Govt documentation checklist will be shown (you can convert this to a modal/pdf).");
+    });
+
   } catch (err) {
-    console.error('GET /api/location/options error:', err);
-    return res.status(500).json({ success:false, message: err.message });
+    console.error(err);
+    analysisResult.innerHTML = `<p class="text-red-600">❌ Error: Could not connect to server</p>`;
   }
 });
 
-/* ---------- POST /api/location/choice ---------- */
-router.post('/choice', async (req, res) => {
+
+// ----------------- PDF GENERATION -----------------
+async function generatePDF(reportData) {
+  // Basic library checks
+  if (!window.jspdf) {
+    alert("PDF library (jsPDF) not loaded. Confirm jspdf script is included.");
+    console.error("jsPDF missing");
+    return;
+  }
+  if (!window.html2canvas) {
+    alert("html2canvas not loaded. Confirm html2canvas script is included.");
+    console.error("html2canvas missing");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  let cursorY = 48;
+
+  // Header
+  doc.setFontSize(18);
+  doc.text("JalRakshak — Technical Report", margin, cursorY);
+  cursorY += 20;
+  doc.setFontSize(11);
+
+  // Meta lines
+  const user = localStorage.getItem("userName") || "User";
+  const metaLines = [
+    `Prepared for: ${user}`,
+    `District: ${reportData.district || "N/A"}`,
+    `Roof Area (m²): ${window.selectedRoofArea || "N/A"}`,
+    `Roof Type: ${reportData.roofType || "N/A"}`,
+    `Dwellers: ${reportData.dwellers || "N/A"}`,
+    `Annual Rainfall used: ${reportData.rainfall_mm || "N/A"} mm`,
+    `Potential harvest: ${reportData.litersPerYear ? reportData.litersPerYear.toLocaleString() + " litres/year" : "N/A"}`,
+    `Estimated cost: ${reportData.estimatedCost ? "₹" + reportData.estimatedCost.toLocaleString() : "N/A"}`,
+    `Water sufficiency: ${reportData.sufficiencyMonths || "N/A"} months`,
+    `Suggestion: ${reportData.suggestion || "N/A"}`
+  ];
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  for (const ln of metaLines) {
+    if (cursorY > pageH - 120) { doc.addPage(); cursorY = 48; }
+    doc.text(ln, margin, cursorY);
+    cursorY += 16;
+  }
+
+  // Try to capture map and outputCard using html2canvas
+  // If capturing the map fails (tainted canvas) we catch and continue with a text-only PDF
+  const mapEl = document.getElementById("map");
+  const outputEl = document.getElementById("outputCard");
+  
+  // hide elements that should not appear in PDF  
+  const pdfHideEls = Array.from(document.querySelectorAll('.no-pdf'));
+  pdfHideEls.forEach(el => el.style.display = 'none');
+
+  async function captureElementToDataURL(el, scale = 1) {
+    if (!el) return null;
+    // html2canvas options: try moderate scale to keep canvas sized reasonably
+    const canvas = await html2canvas(el, { scale: scale, useCORS: true, logging: false, backgroundColor: null });
+    // try toDataURL — this can throw if canvas is tainted
+    try {
+      return canvas.toDataURL("image/png");
+    } catch (err) {
+      console.warn("Canvas toDataURL failed (likely CORS/taint):", err);
+      throw err;
+    }
+  }
+
+  let mapDataUrl = null;
+  let outputDataUrl = null;
+
   try {
-    const userId = getUserIdFromReq(req);
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ success:false, message:'valid userId required' });
+    if (mapEl) {
+      // scale 1.5 to improve resolution but not too large
+      mapDataUrl = await captureElementToDataURL(mapEl, 1.5);
+      console.log("Map captured successfully");
     }
-
-    const choice = req.body.choice || req.body.chosen || req.body;
-    if (!choice || !Number.isFinite(Number(choice.lat)) || !Number.isFinite(Number(choice.lng))) {
-      return res.status(400).json({ success:false, message:'choice must include numeric lat & lng' });
+    if (outputEl) {
+      outputDataUrl = await captureElementToDataURL(outputEl, 1.5);
+      console.log("Output card captured successfully");
     }
-
-    const normalized = {
-      id: choice.id || null,
-      lat: Number(choice.lat),
-      lng: Number(choice.lng),
-      address: choice.address || choice.name || null,
-      raw: choice.raw || choice,
-      chosenAt: new Date()
-    };
-
-    const doc = await User.findByIdAndUpdate(
-      userId,
-      { $set: { chosenLocation: normalized, updatedAt: new Date() } },
-      { new: true, upsert: false }
-    ).lean();
-
-    if (!doc) {
-      console.warn(`POST /api/location/choice — user ${userId} not found`);
-      return res.status(404).json({ success: false, message: 'user not found', code: 'user_not_found' });
-    }
-
-    return res.json({ success:true, chosenLocation: doc.chosenLocation });
-  } catch (err) {
-    console.error('POST /api/location/choice error:', err);
-    return res.status(500).json({ success:false, message: err.message });
+  } catch (captureErr) {
+    // Common failure: SecurityError: The canvas has been tainted by cross-origin data
+    console.warn("Element capture failed. Will generate PDF without map/image. Error:", captureErr);
+    // proceed — mapDataUrl/outputDataUrl may be null
   }
-});
 
-/* ---------- GET /api/location/choice ---------- */
-router.get('/choice', async (req, res) => {
+  // If we have a map image, add it (fit to width with aspect)
   try {
-    const userId = getUserIdFromReq(req);
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ success:false, message:'valid userId required' });
+    if (mapDataUrl) {
+      // Load image into an Image object to read natural size
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = pageW - margin * 2;
+          const maxH = pageH - cursorY - 150;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const drawW = (img.width * ratio)-100;
+          const drawH = img.height * ratio;
+          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
+          doc.addImage(mapDataUrl, "PNG", margin, cursorY, drawW, drawH);
+          cursorY += drawH + 12;
+          resolve();
+        };
+        img.onerror = (e) => {
+          console.warn("Failed to load captured map image into Image object", e);
+          resolve(); // don't block PDF creation
+        };
+        img.src = mapDataUrl;
+      });
     }
-
-    const doc = await User.findById(userId).lean();
-    return res.json({ success:true, chosenLocation: doc?.chosenLocation || null });
   } catch (err) {
-    console.error('GET /api/location/choice error:', err);
-    return res.status(500).json({ success:false, message: err.message });
+    console.warn("Inserting map image into PDF failed:", err);
   }
-});
 
-module.exports = router;
+  // Add output card image if available
+  try {
+    if (outputDataUrl) {
+      await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = pageW - margin * 2;
+          const maxH = pageH - cursorY - 80;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const drawW = img.width * ratio;
+          const drawH = img.height * ratio;
+          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
+          doc.addImage(outputDataUrl, "PNG", margin, cursorY, drawW, drawH);
+          cursorY += drawH + 12;
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = outputDataUrl;
+      });
+    }
+  } catch (err) {
+    console.warn("Inserting output image into PDF failed:", err);
+  }
+
+  // Footer & save
+  doc.setFontSize(9);
+  doc.text("Generated by JalRakshak 1.0", margin, pageH - 28);
+
+  const districtSafe = (reportData.district || "report").replace(/[^\w\-]/g, "_");
+  const filename = `JalRakshak_Report_${districtSafe}.pdf`;
+  try {
+    doc.save(filename);
+    console.log("PDF saved:", filename);
+  } catch (err) {
+    console.error("Failed to save PDF:", err);
+    alert("PDF generation failed. See console for details.");
+  }
+  // restore hidden elements
+  pdfHideEls.forEach(el => el.style.display = '');
+}
