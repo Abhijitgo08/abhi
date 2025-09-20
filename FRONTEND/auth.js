@@ -11,6 +11,19 @@
     }
   }
 
+  // JWT payload parser (base64url decode)
+  function jwtParsePayload(token){
+    try {
+      const part = token.split('.')[1];
+      if (!part) return null;
+      const b64 = part.replace(/-/g,'+').replace(/_/g,'/');
+      const json = decodeURIComponent(atob(b64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      return JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ---- Location flow helper ----
   async function handleLocationFlow(token) {
     L(">>> entered handleLocationFlow");
@@ -140,43 +153,23 @@
 
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
-localStorage.setItem('userName', (data.user && data.user.name) || '');
+        localStorage.setItem('userName', (data.user && data.user.name) || '');
 
-// Try to persist a usable user id.
-// 1) Prefer data.user.* if the backend returned it.
-// 2) Otherwise decode the JWT payload client-side and look for common id fields.
-// Safe base64url decode helper:
-function jwtParsePayload(token) {
-  try {
-    const part = token.split('.')[1];
-    if (!part) return null;
-    // base64url -> base64
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const json = decodeURIComponent(atob(b64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-    return JSON.parse(json);
-  } catch (e) {
-    return null;
-  }
-}
-
-let returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
-
-if (!returnedUserId && data.token) {
-  const payload = jwtParsePayload(data.token);
-  if (payload) {
-    returnedUserId = payload.sub || payload.id || payload._id || (payload.user && (payload.user.id || payload.user._id));
-  }
-}
-
-// final fallback: leave null (we'll use client id)
-if (returnedUserId) {
-  localStorage.setItem('userId', String(returnedUserId));
-} else {
-  // ensure rwh_client_id exists (guest fallback)
-  const clientIdKey = 'rwh_client_id';
-  if (!localStorage.getItem(clientIdKey)) localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
-}
-
+        // Try to persist a usable user id.
+        let returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
+        if (!returnedUserId && data.token) {
+          const payload = jwtParsePayload(data.token);
+          if (payload) {
+            returnedUserId = payload.sub || payload.id || payload._id || (payload.user && (payload.user.id || payload.user._id));
+          }
+        }
+        if (returnedUserId) {
+          localStorage.setItem('userId', String(returnedUserId));
+        } else {
+          // ensure rwh_client_id exists (guest fallback)
+          const clientIdKey = 'rwh_client_id';
+          if (!localStorage.getItem(clientIdKey)) localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
+        }
 
         // Ensure location saved before redirect
         await handleLocationFlow(data.token);
@@ -192,7 +185,7 @@ if (returnedUserId) {
     }
   }
 
-  // ---- Login handler ----
+  // ---- Login handler (REPLACED) ----
   async function loginHandler(e) {
     e.preventDefault();
     L('login clicked');
@@ -213,9 +206,21 @@ if (returnedUserId) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', (data.user && data.user.name) || '');
 
-        // persist actual user id (prefer data.user.id, data.user._id, or data.user.userId)
-        const returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
-        if (returnedUserId) localStorage.setItem('userId', String(returnedUserId));
+        // Persist actual user id: prefer data.user.* then decode JWT payload as fallback
+        let returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
+        if (!returnedUserId && data.token) {
+          const payload = jwtParsePayload(data.token);
+          if (payload) {
+            returnedUserId = payload.sub || payload.id || payload._id || (payload.user && (payload.user.id || payload.user._id));
+          }
+        }
+        if (returnedUserId) {
+          localStorage.setItem('userId', String(returnedUserId));
+        } else {
+          // ensure guest fallback exists
+          const clientIdKey = 'rwh_client_id';
+          if (!localStorage.getItem(clientIdKey)) localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
+        }
 
         // ensure we wait for location save to finish
         const saveResult = await handleLocationFlow(data.token);
