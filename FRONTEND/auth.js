@@ -22,7 +22,8 @@
       localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
     }
     const clientId = localStorage.getItem(clientIdKey);
-    const xUserId = token || clientId;
+    // prefer explicit stored userId (set on login/signup), then token, then fallback clientId
+    const xUserId = localStorage.getItem('userId') || token || clientId;
 
     // helper: geolocation with timeout
     function getGeolocationPromise(timeout = 10000) {
@@ -141,6 +142,10 @@
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', (data.user && data.user.name) || name || '');
 
+        // persist actual user id (prefer data.user.id, data.user._id, or data.user.userId)
+        const returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
+        if (returnedUserId) localStorage.setItem('userId', String(returnedUserId));
+
         // Ensure location saved before redirect
         await handleLocationFlow(data.token);
 
@@ -175,6 +180,10 @@
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', (data.user && data.user.name) || '');
+
+        // persist actual user id (prefer data.user.id, data.user._id, or data.user.userId)
+        const returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
+        if (returnedUserId) localStorage.setItem('userId', String(returnedUserId));
 
         // ensure we wait for location save to finish
         const saveResult = await handleLocationFlow(data.token);
