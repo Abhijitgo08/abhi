@@ -34,30 +34,25 @@ function normalizeOptions(rawArr = []) {
 /**
  * POST /api/location/candidates
  * Body: { latitude, longitude, accuracy? }
- * Returns: { talukas: [...] }
- * This stub just returns fake nearby places — replace with real lookup if needed.
+ * Returns mock nearby talukas for testing
  */
-router.post('/candidates', async (req, res) => {
-  try {
-    const { latitude, longitude } = req.body || {};
-    if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
-      return res.status(400).json({ success: false, message: 'latitude & longitude required' });
-    }
-
-    const lat = Number(latitude);
-    const lon = Number(longitude);
-
-    const talukas = [
-      { id: 'near_1', name: 'Nearby Place 1', lat, lng, distance_m: 0 },
-      { id: 'near_2', name: 'Nearby Place 2', lat: lat + 0.0008, lon: lng - 0.0006, distance_m: 90 },
-      { id: 'near_3', name: 'Nearby Place 3', lat: lat - 0.0011, lon: lng + 0.0012, distance_m: 140 }
-    ];
-
-    return res.json({ talukas });
-  } catch (err) {
-    console.error('POST /api/location/candidates error:', err && err.message);
-    return res.status(500).json({ success: false, message: err && err.message });
+router.post('/candidates', (req, res) => {
+  const { latitude, longitude } = req.body;
+  if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+    return res.status(400).json({ success: false, message: 'latitude & longitude required' });
   }
+
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+
+  const talukas = [
+    { id: 'near_1', name: 'Nearby Place 1', lat, lon, distance_m: 0 },
+    { id: 'near_2', name: 'Nearby Place 2', lat: lat + 0.0008, lon: lon - 0.0006, distance_m: 90 },
+    { id: 'near_3', name: 'Nearby Place 3', lat: lat - 0.0011, lon: lon + 0.0012, distance_m: 140 },
+    { id: 'near_4', name: 'Nearby Place 4', lat: lat + 0.0015, lon: lon + 0.0015, distance_m: 200 }
+  ];
+
+  return res.json({ success: true, talukas });
 });
 
 /**
