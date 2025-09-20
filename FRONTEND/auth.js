@@ -20,6 +20,24 @@
     ]);
   }
 
+  // ---------- wrapper to prevent double submissions ----------
+  function singleSubmission(handler) {
+    let locked = false;
+    return async function wrapped(e) {
+      if (locked) {
+        e.preventDefault();
+        console.warn('[AUTH] ⏳ Double submit prevented');
+        return;
+      }
+      locked = true;
+      try {
+        await handler.call(this, e);
+      } finally {
+        locked = false;
+      }
+    };
+  }
+
   // ---- Location flow ----
   async function handleLocationFlow(token) {
     L(">>> entered handleLocationFlow");
@@ -85,13 +103,11 @@
     const candJson = await safeJson(candResp);
     L('/candidates response', candResp.status);
 
-    // be defensive if candidates endpoint returned an error or unexpected shape
     if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
       L('❌ /candidates did not return talukas; skipping save', candJson);
       return { ok: false, reason: 'no-candidates' };
     }
 
-    // Normalize candidates defensively: force Number(...) and accept many key names.
     const options = (candJson.talukas || []).map(t => {
       const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
       const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
@@ -112,17 +128,13 @@
       return { ok: false, reason: 'no-options' };
     }
 
-    // ensure we have userId (re-read to be safe)
     const userId = localStorage.getItem('userId');
     if (!userId) {
       L('❌ Missing userId in localStorage — aborting options save');
       return { ok:false, reason:'no-userid' };
     }
 
-    // build payload (include userId in body as fallback if headers stripped)
     const payload = { userId, options };
-
-    // build headers defensively - only include Authorization when we actually have a token
     const headers = { 'Content-Type': 'application/json', 'x-user-id': userId };
     if (authHeader) headers['Authorization'] = authHeader;
 
@@ -137,7 +149,6 @@
     return { ok: saveResp.ok, savedCount: saveJson?.savedCount || 0, body: saveJson };
   }
 
-  // expose for debugging or other scripts
   window.handleLocationFlow = handleLocationFlow;
 
   // ---- Signup ----
@@ -159,7 +170,6 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        // non-blocking location save with timeout; redirect will always happen
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
@@ -188,7 +198,6 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        // non-blocking location save with timeout; redirect will always happen
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
@@ -199,52 +208,34 @@
     }
   }
 
-  // ---------- trySaveLocationThenRedirect (ensures redirect always happens) ----------
   async function trySaveLocationThenRedirect(token, redirectUrl = 'dashboard.html') {
     try {
       if (typeof window.handleLocationFlow === 'function') {
-        // cap the location flow to 7s so redirect isn't blocked
         const saveResult = await withTimeout(window.handleLocationFlow(token), 7000);
         L('location save result (timed):', saveResult);
-      } else {
-        L('handleLocationFlow not available');
       }
     } catch (err) {
       L('handleLocationFlow threw', err);
     } finally {
-      // Always redirect regardless of location save outcome
       window.location.href = redirectUrl;
     }
   }
 
   // ---- Attach ----
   function init() {
-    // defensive: avoid attaching duplicate listeners if script accidentally included twice
     const lf = document.getElementById('loginForm');
     const sf = document.getElementById('signupForm');
 
-    // remove any inline onsubmit handlers if present (best-effort)
-    if (lf) lf.onsubmit = null;
-    if (sf) sf.onsubmit = null;
-
-    // remove duplicates by checking existing listeners (if browser supports getEventListeners)
-    try {
-      if (typeof getEventListeners === 'function') {
-        const lListeners = getEventListeners(lf)?.submit || [];
-        const sListeners = getEventListeners(sf)?.submit || [];
-        // if there are already non-trivial listeners attached, log a warning (we still attach ours)
-        if ((lListeners.length + sListeners.length) > 0) {
-          L('init detected existing submit listeners', { login: lListeners.length, signup: sListeners.length });
-        }
-      }
-    } catch (e) {
-      // ignore
+    if (lf) {
+      lf.onsubmit = null;
+      lf.addEventListener('submit', singleSubmission(loginHandler));
+    }
+    if (sf) {
+      sf.onsubmit = null;
+      sf.addEventListener('submit', singleSubmission(signupHandler));
     }
 
-    // attach ours
-    sf && sf.addEventListener('submit', signupHandler);
-    lf && lf.addEventListener('submit', loginHandler);
-    L('auth handlers attached');
+    L('auth handlers attached (with debounce)');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
