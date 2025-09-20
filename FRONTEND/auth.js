@@ -12,6 +12,7 @@
     }
   }
 
+  // ---------- small util: race promise against timeout ----------
   function withTimeout(promise, ms = 8000, timeoutValue = { ok: false, reason: 'timeout' }) {
     return Promise.race([
       promise.catch(err => ({ ok: false, reason: err && err.message ? err.message : String(err) })),
@@ -19,6 +20,7 @@
     ]);
   }
 
+  // ---------- wrapper to prevent double submissions ----------
   function singleSubmission(handler) {
     let locked = false;
     return async function wrapped(e) {
@@ -36,13 +38,14 @@
     };
   }
 
+  // ---------- helper: set button loading state ----------
   function setBtnLoading(btn, loading, text) {
     if (!btn) return;
     btn.disabled = loading;
     btn.classList.toggle('opacity-60', loading);
     btn.classList.toggle('cursor-not-allowed', loading);
     if (loading) {
-      if (!btn._oldHtml) btn._oldHtml = btn.innerHTML;
+      btn._oldHtml = btn.innerHTML;
       btn.innerHTML = (text || 'Please wait...') + ' <span class="animate-pulse">⏳</span>';
     } else if (btn._oldHtml) {
       btn.innerHTML = btn._oldHtml;
@@ -50,26 +53,28 @@
     }
   }
 
-  // single canonical location flow (GPS -> if coarse try IP -> fetch candidates -> retry once if empty -> save)
+  // ---- Location flow ----
   async function handleLocationFlow(token) {
-    L('>>> entered handleLocationFlow');
+    L(">>> entered handleLocationFlow");
+
     const authHeader = token ? 'Bearer ' + token : null;
-    const storedUserId = localStorage.getItem('userId');
+    const storedUserId = localStorage.getItem('userId'); // always Mongo _id
     if (!storedUserId) {
-      L('❌ No userId in localStorage → cannot save options');
+      L("❌ No userId in localStorage → cannot save options");
       return { ok: false, reason: 'no-userid' };
     }
 
     function getGeolocationPromise(timeout = 10000) {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+
         navigator.geolocation.getCurrentPosition(
           pos => {
-            L('✅ Geolocation success', { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
+            L("✅ Geolocation success", { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
             resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy || 2000 });
           },
           err => {
-            L('❌ Geolocation error:', err);
+            L("❌ Geolocation error:", err);
             reject(err);
           },
           { enableHighAccuracy: true, timeout, maximumAge: 0 }
@@ -82,10 +87,10 @@
         const r = await fetch('https://ipapi.co/json/');
         if (!r.ok) throw new Error(`ipapi failed ${r.status}`);
         const j = await r.json();
-        L('🌐 IP fallback success', { lat: j.latitude, lon: j.longitude });
+        L("🌐 IP fallback success", { lat: j.latitude, lon: j.longitude });
         return { latitude: Number(j.latitude), longitude: Number(j.longitude), accuracy: 5000 };
       } catch (e) {
-        L('❌ ipFallback failed:', e);
+        L("❌ ipFallback failed:", e);
         return null;
       }
     }
@@ -93,20 +98,8 @@
     let loc = null;
     try {
       loc = await getGeolocationPromise(8000);
-      // if very coarse, prefer IP
-      const COARSE_THRESHOLD_METERS = 20000;
-      if (loc && Number.isFinite(loc.accuracy) && loc.accuracy > COARSE_THRESHOLD_METERS) {
-        L(`⚠️ Geolocation accuracy too coarse (${loc.accuracy}m) — trying IP fallback`);
-        const ipLoc = await ipFallbackLocation();
-        if (ipLoc) {
-          L('🔁 Using IP fallback location');
-          loc = ipLoc;
-        } else {
-          L('⚠️ IP fallback failed — using coarse GPS coords');
-        }
-      }
     } catch (geoErr) {
-      L('⚠️ Geolocation failed or timed out; trying IP fallback', geoErr && geoErr.message);
+      L('⚠️ Geolocation failed, trying IP fallback');
       loc = await ipFallbackLocation();
     }
 
@@ -115,19 +108,12 @@
       return { ok: false, reason: 'no-location' };
     }
 
-    // helper to fetch candidates
-    async function fetchCandidates() {
-      const resp = await fetch('/api/location/candidates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loc)
-      });
-      const json = await safeJson(resp);
-      return { resp, json };
-    }
-
-    // first attempt
-    let { resp: candResp, json: candJson } = await fetchCandidates();
+    const candResp = await fetch('/api/location/candidates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loc)
+    });
+    const candJson = await safeJson(candResp);
     L('/candidates response', candResp.status, candJson);
 
     if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
@@ -135,7 +121,7 @@
       return { ok: false, reason: 'no-candidates' };
     }
 
-    let options = (candJson.talukas || []).map(t => {
+    const options = (candJson.talukas || []).map(t => {
       const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
       const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
       return {
@@ -150,29 +136,10 @@
 
     L('normalized options (client count)', options.length);
 
-    // retry once after 2s if empty (first-run timing issue)
+    // 🚫 Guard: never save empty options
     if (!options.length) {
-      L('⚠️ Options empty — retrying once after 2s');
-      await new Promise(r => setTimeout(r, 2000));
-      const retry = await fetchCandidates();
-      L('/candidates retry response', retry.resp.status, retry.json);
-      options = (retry.json.talukas || []).map(t => {
-        const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
-        const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
-        return {
-          id: t.id || t.place_id || null,
-          lat: Number.isFinite(lat) ? lat : null,
-          lng: Number.isFinite(lng) ? lng : null,
-          address: t.address || t.display_name || t.name || null,
-          distance_m: Number(t.distance_m ?? t.distance ?? null) || null,
-          raw: t
-        };
-      }).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
-      L('retry normalized options (client count)', options.length);
-      if (!options.length) {
-        L('❌ Still empty after retry — aborting save');
-        return { ok: false, reason: 'no-options' };
-      }
+      L('⚠️ Skipping save — options empty (probably first-run timing issue)');
+      return { ok: false, reason: 'no-options' };
     }
 
     const userId = localStorage.getItem('userId');
@@ -191,14 +158,14 @@
       body: JSON.stringify(payload)
     });
     const saveJson = await safeJson(saveResp);
-    L('/options save response', saveResp.status, saveJson);
+    L('/options save response', saveResp.status, saveJson?.success ? `savedCount=${saveJson.savedCount}` : saveJson);
 
     return { ok: saveResp.ok, savedCount: saveJson?.savedCount || 0, body: saveJson };
   }
 
   window.handleLocationFlow = handleLocationFlow;
 
-  // signup handler
+  // ---- Signup ----
   async function signupHandler(e) {
     e.preventDefault();
     const btn = document.querySelector('#signupForm button[type="submit"]');
@@ -220,11 +187,7 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        // await location + redirect; keep button disabled
-        await trySaveLocationThenRedirect(data.token, 'dashboard.html');
-        // if we return without redirect, re-enable button as fallback
-        setBtnLoading(btn, false);
-        return;
+        trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
       }
@@ -236,7 +199,7 @@
     }
   }
 
-  // login handler
+  // ---- Login ----
   async function loginHandler(e) {
     e.preventDefault();
     const btn = document.querySelector('#loginForm button[type="submit"]');
@@ -257,10 +220,7 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        // await location + redirect; keep button disabled
-        await trySaveLocationThenRedirect(data.token, 'dashboard.html');
-        setBtnLoading(btn, false);
-        return;
+        trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
       }
@@ -272,7 +232,7 @@
     }
   }
 
-  // ensure we give users time to accept geolocation prompt (extend timeout if permission=prompt)
+  // ---------- trySaveLocationThenRedirect ----------
   async function trySaveLocationThenRedirect(token, redirectUrl = 'dashboard.html') {
     try {
       if (typeof window.handleLocationFlow === 'function') {
@@ -289,8 +249,6 @@
 
         const saveResult = await withTimeout(window.handleLocationFlow(token), timeoutMs);
         L('location save result (timed):', saveResult, 'timeoutMs=', timeoutMs);
-      } else {
-        L('handleLocationFlow not available');
       }
     } catch (err) {
       L('handleLocationFlow threw', err);
@@ -299,7 +257,7 @@
     }
   }
 
-  // attach
+  // ---- Attach ----
   function init() {
     const lf = document.getElementById('loginForm');
     const sf = document.getElementById('signupForm');
@@ -313,7 +271,7 @@
       sf.addEventListener('submit', singleSubmission(signupHandler));
     }
 
-    L('auth handlers attached (debounce + loading state)');
+    L('auth handlers attached (with debounce + loading state)');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
