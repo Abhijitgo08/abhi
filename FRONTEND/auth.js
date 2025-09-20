@@ -108,12 +108,18 @@
       return { ok: false, reason: 'no-location' };
     }
 
-    const candResp = await fetch('/api/location/candidates', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loc)
-    });
-    const candJson = await safeJson(candResp);
+    async function fetchCandidates() {
+      const resp = await fetch('/api/location/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loc)
+      });
+      const json = await safeJson(resp);
+      return { resp, json };
+    }
+
+    // 1st attempt
+    let { resp: candResp, json: candJson } = await fetchCandidates();
     L('/candidates response', candResp.status, candJson);
 
     if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
@@ -121,7 +127,7 @@
       return { ok: false, reason: 'no-candidates' };
     }
 
-    const options = (candJson.talukas || []).map(t => {
+    let options = (candJson.talukas || []).map(t => {
       const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
       const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
       return {
@@ -136,10 +142,29 @@
 
     L('normalized options (client count)', options.length);
 
-    // 🚫 Guard: never save empty options
+    // 🚫 Guard + retry once
     if (!options.length) {
-      L('⚠️ Skipping save — options empty (probably first-run timing issue)');
-      return { ok: false, reason: 'no-options' };
+      L('⚠️ Options empty — retrying /candidates once after 2s...');
+      await new Promise(r => setTimeout(r, 2000));
+      const retry = await fetchCandidates();
+      L('/candidates retry response', retry.resp.status, retry.json);
+      options = (retry.json.talukas || []).map(t => {
+        const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
+        const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
+        return {
+          id: t.id || t.place_id || null,
+          lat: Number.isFinite(lat) ? lat : null,
+          lng: Number.isFinite(lng) ? lng : null,
+          address: t.address || t.display_name || t.name || null,
+          distance_m: Number(t.distance_m ?? t.distance ?? null) || null,
+          raw: t
+        };
+      }).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
+      L('retry normalized options (client count)', options.length);
+      if (!options.length) {
+        L('❌ Still empty after retry — aborting save');
+        return { ok: false, reason: 'no-options' };
+      }
     }
 
     const userId = localStorage.getItem('userId');
