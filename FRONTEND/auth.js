@@ -1,4 +1,4 @@
-/* auth.js - reliable auth + location flow (with clear logging & forced geolocation popup) */
+/* auth.js - reliable auth + location flow (clean, safe for production) */
 (() => {
   const API_BASE = '/api/auth';
 
@@ -47,7 +47,7 @@
         const r = await fetch('https://ipapi.co/json/');
         if (!r.ok) throw new Error(`ipapi failed ${r.status}`);
         const j = await r.json();
-        L("🌐 IP fallback success:", j);
+        L("🌐 IP fallback success");
         return { latitude: Number(j.latitude), longitude: Number(j.longitude), accuracy: 5000 };
       } catch (e) {
         L("❌ ipFallback failed:", e);
@@ -75,10 +75,15 @@
       body: JSON.stringify(loc)
     });
     const candJson = await safeJson(candResp);
-    L('/candidates response', candResp.status, candJson);
+    L('/candidates response', candResp.status);
+
+    // be defensive if candidates endpoint returned an error or unexpected shape
+    if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
+      L('❌ /candidates did not return talukas; skipping save', candJson);
+      return { ok: false, reason: 'no-candidates' };
+    }
 
     // Normalize candidates defensively: force Number(...) and accept many key names.
-    // Also preserve name/display_name/address fallbacks.
     const options = (candJson.talukas || []).map(t => {
       const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
       const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
@@ -92,7 +97,7 @@
       };
     }).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
 
-    L('normalized options (client)', options);
+    L('normalized options (client count)', options.length);
 
     if (!options.length) {
       L('❌ No normalized options returned from candidates; skipping save');
@@ -106,9 +111,8 @@
       return { ok:false, reason:'no-userid' };
     }
 
-    // build payload and log it for debugging
+    // build payload (include userId in body as fallback if headers stripped)
     const payload = { userId, options };
-    console.debug('[AUTH] POST /api/location/options payload', payload);
 
     const saveResp = await fetch('/api/location/options', {
       method: 'POST',
@@ -120,7 +124,7 @@
       body: JSON.stringify(payload)
     });
     const saveJson = await safeJson(saveResp);
-    L('/options save response', saveResp.status, saveJson);
+    L('/options save response', saveResp.status, saveJson?.success ? `savedCount=${saveJson.savedCount}` : saveJson);
 
     return { ok: saveResp.ok, savedCount: saveJson?.savedCount || 0 };
   }
