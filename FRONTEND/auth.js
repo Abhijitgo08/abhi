@@ -230,7 +230,7 @@ function hideBlockingOverlay() {
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        showBlockingOverlay('Fetching your location — please wait');
+        showBlockingOverlay('Fetching your location — Be patience');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
