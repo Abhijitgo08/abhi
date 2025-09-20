@@ -93,15 +93,27 @@
     }
 
     // save options
-    const saveResp = await fetch('/api/location/options', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader,
-        'x-user-id': userId
-      },
-      body: JSON.stringify({ options })
-    });
+    // ensure numeric lat/lng
+const scrubbedOptions = options.map(o => ({
+  id: o.id || null,
+  lat: Number(o.lat),
+  lng: Number(o.lng),
+  address: o.address || null,
+  distance_m: Number(o.distance_m) || null,
+  raw: o.raw || null
+}));
+
+const saveResp = await fetch('/api/location/options', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': authHeader,
+    'x-user-id': userId
+  },
+  // also include userId in body so server can pick it from body if header missing
+  body: JSON.stringify({ userId, options: scrubbedOptions })
+});
+
     const saveJson = await safeJson(saveResp);
     L('/options save response', saveResp.status, saveJson);
 
