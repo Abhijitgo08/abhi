@@ -153,7 +153,7 @@ router.post('/candidates', async (req, res) => {
       : [6,7,8];
 
     let baseRadius = isFinite(Number(accuracy)) ? Math.round(Number(accuracy)) : 2000;
-    baseRadius = Math.max(500, baseRadius);
+    baseRadius = Math.max(2000, baseRadius);
 
     const envMax = Number(process.env.MAX_RADIUS_METERS || 200000);
     const bodyMax = Number.isFinite(Number(maxRadius)) ? Number(maxRadius) : NaN;
