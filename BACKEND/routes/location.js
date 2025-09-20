@@ -14,21 +14,32 @@ function getUserIdFromReq(req) {
 }
 
 // Normalize options
+// Normalize options
 function normalizeOptions(rawArr = []) {
   if (!Array.isArray(rawArr)) return [];
+
   return rawArr.map(o => {
+    // accept many lat/lng keys: lat, latitude, center.lat
     const lat = Number(o.lat ?? o.latitude ?? (o.center && o.center.lat));
-    const lng = Number(o.lng ?? o.longitude ?? (o.center && o.center.lon));
+    // accept many lng keys: lng, lon, longitude, center.lon
+    const lng = Number(o.lng ?? o.lon ?? o.longitude ?? (o.center && o.center.lon));
+
+    // distance may be provided under different keys
+    const distanceCandidate = o.distance_m ?? o.distance ?? o.dist ?? null;
+    const distance_m = distanceCandidate != null ? Number(distanceCandidate) : null;
+
     return {
       id: o.id || o.place_id || null,
       lat: Number.isFinite(lat) ? lat : null,
       lng: Number.isFinite(lng) ? lng : null,
+      // prefer structured address-like fields but fall back to name
       address: o.address || o.display_name || o.name || null,
-      distance_m: Number(o.distance_m ?? o.distance ?? null) || null,
+      distance_m: Number.isFinite(Number(distance_m)) ? Number(distance_m) : null,
       raw: o
     };
   }).filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
 }
+
 
 /**
  * POST /api/location/candidates
@@ -70,12 +81,18 @@ router.post('/options', async (req, res) => {
     }
 
     const doc = await User.findByIdAndUpdate(
-      userId,
-      { $set: { locationOptions: options, updatedAt: new Date() } },
-      { new: true }
-    ).lean();
+  userId,
+  { $set: { locationOptions: options, updatedAt: new Date() } },
+  { new: true, upsert: false }
+).lean();
 
-    return res.json({ success: true, savedCount: options.length, locationOptions: doc.locationOptions });
+if (!doc) {
+  console.warn(`POST /api/location/options — user ${userId} not found`);
+  return res.status(404).json({ success: false, message: 'user not found', code: 'user_not_found' });
+}
+
+return res.json({ success: true, savedCount: options.length, locationOptions: doc.locationOptions });
+
   } catch (err) {
     console.error('POST /api/location/options error:', err);
     return res.status(500).json({ success:false, message: err.message });
