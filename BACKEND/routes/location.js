@@ -1,6 +1,7 @@
 // routes/location.js
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 // Helper: derive userId from request (priority: req.userId (auth middleware) -> x-user-id -> Bearer token -> body/query)
@@ -13,6 +14,20 @@ function getUserIdFromReq(req) {
   if (req.body && req.body.userId) return String(req.body.userId);
   if (req.query && req.query.userId) return String(req.query.userId);
   return null;
+}
+
+// Build a filter that matches either Mongo _id (ObjectId) or legacy userId string
+function buildUserFilter(userId) {
+  if (!userId) return null;
+  if (mongoose.Types.ObjectId.isValid(userId)) {
+    try {
+      return { _id: new mongoose.Types.ObjectId(userId) };
+    } catch (e) {
+      // fall back to string
+      return { userId: String(userId) };
+    }
+  }
+  return { userId: String(userId) };
 }
 
 function normalizeOptions(rawArr = []) {
@@ -37,7 +52,7 @@ function normalizeOptions(rawArr = []) {
  * Returns mock nearby talukas for testing
  */
 router.post('/candidates', (req, res) => {
-  const { latitude, longitude } = req.body;
+  const { latitude, longitude } = req.body || {};
   if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
     return res.status(400).json({ success: false, message: 'latitude & longitude required' });
   }
@@ -62,6 +77,11 @@ router.post('/candidates', (req, res) => {
  */
 router.post('/options', async (req, res) => {
   try {
+    // Debug log: what the server received (useful for diagnosing empty payloads)
+    console.log('>>> /api/location/options called; headers:', JSON.stringify(req.headers || {}), 'bodyKeys:', Object.keys(req.body || {}));
+    // optionally uncomment to print full body:
+    // console.log('>>> /api/location/options body:', JSON.stringify(req.body));
+
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(400).json({ success:false, message:'userId required (x-user-id header, Authorization Bearer, or body.userId)' });
 
@@ -69,9 +89,17 @@ router.post('/options', async (req, res) => {
     const options = normalizeOptions(raw);
     if (!options.length) return res.status(400).json({ success:false, message:'options must be a non-empty array with lat & lng' });
 
+    // build filter matching either _id or userId string
+    const filter = buildUserFilter(userId);
+    if (!filter) return res.status(400).json({ success:false, message:'invalid userId' });
+
+    // If using _id (ObjectId) we don't set userId in doc; otherwise set userId on insert
+    const setOnInsert = { createdAt: new Date() };
+    if (!filter._id) setOnInsert.userId = String(userId);
+
     const doc = await User.findOneAndUpdate(
-      { userId },
-      { $set: { locationOptions: options, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      filter,
+      { $set: { locationOptions: options, updatedAt: new Date() }, $setOnInsert: setOnInsert },
       { upsert: true, new: true }
     ).lean();
 
@@ -91,7 +119,10 @@ router.get('/options', async (req, res) => {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(400).json({ success:false, message:'userId required' });
 
-    const doc = await User.findOne({ userId }).lean();
+    const filter = buildUserFilter(userId);
+    if (!filter) return res.status(400).json({ success:false, message:'invalid userId' });
+
+    const doc = await User.findOne(filter).lean();
     return res.json({ success: true, locationOptions: doc?.locationOptions || [], chosenLocation: doc?.chosenLocation || null });
   } catch (err) {
     console.error('GET /api/location/options error:', err && err.message);
@@ -122,9 +153,15 @@ router.post('/choice', async (req, res) => {
       chosenAt: new Date()
     };
 
+    const filter = buildUserFilter(userId);
+    if (!filter) return res.status(400).json({ success:false, message:'invalid userId' });
+
+    const setOnInsert = { createdAt: new Date() };
+    if (!filter._id) setOnInsert.userId = String(userId);
+
     const doc = await User.findOneAndUpdate(
-      { userId },
-      { $set: { chosenLocation: normalized, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      filter,
+      { $set: { chosenLocation: normalized, updatedAt: new Date() }, $setOnInsert: setOnInsert },
       { upsert: true, new: true }
     ).lean();
 
@@ -144,7 +181,10 @@ router.get('/choice', async (req, res) => {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(400).json({ success:false, message:'userId required' });
 
-    const doc = await User.findOne({ userId }).lean();
+    const filter = buildUserFilter(userId);
+    if (!filter) return res.status(400).json({ success:false, message:'invalid userId' });
+
+    const doc = await User.findOne(filter).lean();
     return res.json({ success:true, chosenLocation: doc?.chosenLocation || null });
   } catch (err) {
     console.error('GET /api/location/choice error:', err && err.message);
