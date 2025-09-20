@@ -53,7 +53,7 @@
     }
   }
 
-  // ---- Location flow (single, canonical implementation) ----
+  // ---- Location flow ----
   async function handleLocationFlow(token) {
     L(">>> entered handleLocationFlow");
 
@@ -70,7 +70,7 @@
 
         navigator.geolocation.getCurrentPosition(
           pos => {
-            L("✅ Geolocation success", { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
+            L("✅ Geolocation success");
             resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy || 2000 });
           },
           err => {
@@ -87,7 +87,7 @@
         const r = await fetch('https://ipapi.co/json/');
         if (!r.ok) throw new Error(`ipapi failed ${r.status}`);
         const j = await r.json();
-        L("🌐 IP fallback success", { lat: j.latitude, lon: j.longitude });
+        L("🌐 IP fallback success");
         return { latitude: Number(j.latitude), longitude: Number(j.longitude), accuracy: 5000 };
       } catch (e) {
         L("❌ ipFallback failed:", e);
@@ -95,23 +95,11 @@
       }
     }
 
-    // try gps first, then fallback if accuracy too coarse
     let loc = null;
     try {
       loc = await getGeolocationPromise(8000);
-      const COARSE_THRESHOLD_METERS = 20000; // 20 km
-      if (loc && Number.isFinite(loc.accuracy) && loc.accuracy > COARSE_THRESHOLD_METERS) {
-        L(`⚠️ Geolocation accuracy too coarse (${loc.accuracy}m) — attempting IP fallback`);
-        const ipLoc = await ipFallbackLocation();
-        if (ipLoc) {
-          L('🔁 Using IP fallback location instead of coarse GPS');
-          loc = ipLoc;
-        } else {
-          L('⚠️ IP fallback failed — will use coarse GPS coords');
-        }
-      }
     } catch (geoErr) {
-      L('⚠️ Geolocation failed or timed out, trying IP fallback', geoErr && geoErr.message);
+      L('⚠️ Geolocation failed, trying IP fallback');
       loc = await ipFallbackLocation();
     }
 
@@ -126,7 +114,7 @@
       body: JSON.stringify(loc)
     });
     const candJson = await safeJson(candResp);
-    L('/candidates response', candResp.status, candJson);
+    L('/candidates response', candResp.status);
 
     if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
       L('❌ /candidates did not return talukas; skipping save', candJson);
@@ -169,12 +157,11 @@
       body: JSON.stringify(payload)
     });
     const saveJson = await safeJson(saveResp);
-    L('/options save response', saveResp.status, saveJson);
+    L('/options save response', saveResp.status, saveJson?.success ? `savedCount=${saveJson.savedCount}` : saveJson);
 
     return { ok: saveResp.ok, savedCount: saveJson?.savedCount || 0, body: saveJson };
   }
 
-  // expose for debugging or other scripts
   window.handleLocationFlow = handleLocationFlow;
 
   // ---- Signup ----
@@ -199,7 +186,6 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        // non-blocking location save; redirect always happens in finally of trySaveLocationThenRedirect
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
@@ -245,14 +231,11 @@
     }
   }
 
-  // ---------- trySaveLocationThenRedirect (ensures redirect always happens) ----------
   async function trySaveLocationThenRedirect(token, redirectUrl = 'dashboard.html') {
     try {
       if (typeof window.handleLocationFlow === 'function') {
         const saveResult = await withTimeout(window.handleLocationFlow(token), 7000);
         L('location save result (timed):', saveResult);
-      } else {
-        L('handleLocationFlow not available');
       }
     } catch (err) {
       L('handleLocationFlow threw', err);
