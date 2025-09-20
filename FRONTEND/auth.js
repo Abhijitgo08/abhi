@@ -185,9 +185,13 @@
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.user?.name || '');
-        localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+        localStorage.setItem('userId', data.user?.id || data.user?._1d || '');
 
-        trySaveLocationThenRedirect(data.token, 'dashboard.html');
+        // await location+redirect; keep button disabled while we do this
+        await trySaveLocationThenRedirect(data.token, 'dashboard.html');
+        // if trySaveLocationThenRedirect returns (no redirect occurred), re-enable button as fallback
+        setBtnLoading(btn, false);
+        return;
       } else {
         alert(data.msg || 'Signup failed');
       }
@@ -195,6 +199,7 @@
       console.error(err);
       alert('Network error');
     } finally {
+      // only re-enable on failure paths (we didn't redirect)
       setBtnLoading(btn, false);
     }
   }
@@ -220,7 +225,11 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
-        trySaveLocationThenRedirect(data.token, 'dashboard.html');
+        // await location+redirect; keep button disabled while we do this
+        await trySaveLocationThenRedirect(data.token, 'dashboard.html');
+        // if trySaveLocationThenRedirect returns (no redirect occurred), re-enable button as fallback
+        setBtnLoading(btn, false);
+        return;
       } else {
         alert(data.msg || 'Login failed');
       }
@@ -228,11 +237,13 @@
       console.error(err);
       alert('Network error');
     } finally {
+      // only re-enable on failure paths (we didn't redirect)
       setBtnLoading(btn, false);
     }
   }
 
-  // ---------- trySaveLocationThenRedirect ----------
+  // ---------- trySaveLocationThenRedirect (ensures redirect always happens,
+  // with extended timeout if permission is prompt) ----------
   async function trySaveLocationThenRedirect(token, redirectUrl = 'dashboard.html') {
     try {
       if (typeof window.handleLocationFlow === 'function') {
@@ -249,10 +260,13 @@
 
         const saveResult = await withTimeout(window.handleLocationFlow(token), timeoutMs);
         L('location save result (timed):', saveResult, 'timeoutMs=', timeoutMs);
+      } else {
+        L('handleLocationFlow not available');
       }
     } catch (err) {
       L('handleLocationFlow threw', err);
     } finally {
+      // navigate after attempt/timeout
       window.location.href = redirectUrl;
     }
   }
