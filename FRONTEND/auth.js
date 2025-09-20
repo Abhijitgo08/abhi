@@ -17,8 +17,8 @@
     L(">>> entered handleLocationFlow");
 
     const authHeader = token ? 'Bearer ' + token : null;
-    const userId = localStorage.getItem('userId'); // always Mongo _id
-    if (!userId) {
+    const storedUserId = localStorage.getItem('userId'); // always Mongo _id
+    if (!storedUserId) {
       L("❌ No userId in localStorage → cannot save options");
       return { ok: false, reason: 'no-userid' };
     }
@@ -77,37 +77,47 @@
     const candJson = await safeJson(candResp);
     L('/candidates response', candResp.status, candJson);
 
-// Also preserve name/display_name/address fallbacks.
-const options = (candJson.talukas || []).map(t => {
-  const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
-  const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
-  return {
-    id: t.id || t.place_id || null,
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-    address: t.address || t.display_name || t.name || null,
-    distance_m: Number(t.distance_m ?? t.distance ?? null) || null,
-    raw: t
-  };
-}).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
+    // Normalize candidates defensively: force Number(...) and accept many key names.
+    // Also preserve name/display_name/address fallbacks.
+    const options = (candJson.talukas || []).map(t => {
+      const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
+      const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
+      return {
+        id: t.id || t.place_id || null,
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        address: t.address || t.display_name || t.name || null,
+        distance_m: Number(t.distance_m ?? t.distance ?? null) || null,
+        raw: t
+      };
+    }).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
 
-L('normalized options (client)', options);
-
+    L('normalized options (client)', options);
 
     if (!options.length) {
       L('❌ No normalized options returned from candidates; skipping save');
       return { ok: false, reason: 'no-options' };
     }
 
-    // save options
+    // ensure we have userId (re-read to be safe)
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      L('❌ Missing userId in localStorage — aborting options save');
+      return { ok:false, reason:'no-userid' };
+    }
+
+    // build payload and log it for debugging
+    const payload = { userId, options };
+    console.debug('[AUTH] POST /api/location/options payload', payload);
+
     const saveResp = await fetch('/api/location/options', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        'Authorization': authHeader || '',
         'x-user-id': userId
       },
-      body: JSON.stringify({ options })
+      body: JSON.stringify(payload)
     });
     const saveJson = await safeJson(saveResp);
     L('/options save response', saveResp.status, saveJson);
