@@ -70,7 +70,7 @@
 
         navigator.geolocation.getCurrentPosition(
           pos => {
-            L("✅ Geolocation success");
+            L("✅ Geolocation success", { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
             resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy || 2000 });
           },
           err => {
@@ -87,7 +87,7 @@
         const r = await fetch('https://ipapi.co/json/');
         if (!r.ok) throw new Error(`ipapi failed ${r.status}`);
         const j = await r.json();
-        L("🌐 IP fallback success");
+        L("🌐 IP fallback success", { lat: j.latitude, lon: j.longitude });
         return { latitude: Number(j.latitude), longitude: Number(j.longitude), accuracy: 5000 };
       } catch (e) {
         L("❌ ipFallback failed:", e);
@@ -114,7 +114,7 @@
       body: JSON.stringify(loc)
     });
     const candJson = await safeJson(candResp);
-    L('/candidates response', candResp.status);
+    L('/candidates response', candResp.status, candJson);
 
     if (!candResp.ok || !Array.isArray(candJson?.talukas)) {
       L('❌ /candidates did not return talukas; skipping save', candJson);
@@ -136,8 +136,9 @@
 
     L('normalized options (client count)', options.length);
 
+    // 🚫 Guard: never save empty options
     if (!options.length) {
-      L('❌ No normalized options returned from candidates; skipping save');
+      L('⚠️ Skipping save — options empty (probably first-run timing issue)');
       return { ok: false, reason: 'no-options' };
     }
 
