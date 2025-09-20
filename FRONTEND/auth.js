@@ -13,6 +13,8 @@
 
   // ---- Location flow helper ----
   async function handleLocationFlow(token) {
+    L(">>> entered handleLocationFlow");
+
     // token: JWT string
     const authHeader = token ? 'Bearer ' + token : null;
     const clientIdKey = 'rwh_client_id';
