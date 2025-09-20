@@ -48,9 +48,9 @@ router.post('/candidates', async (req, res) => {
     const lon = Number(longitude);
 
     const talukas = [
-      { id: 'near_1', name: 'Nearby Place 1', lat, lon, distance_m: 0 },
-      { id: 'near_2', name: 'Nearby Place 2', lat: lat + 0.0008, lon: lon - 0.0006, distance_m: 90 },
-      { id: 'near_3', name: 'Nearby Place 3', lat: lat - 0.0011, lon: lon + 0.0012, distance_m: 140 }
+      { id: 'near_1', name: 'Nearby Place 1', lat, lng, distance_m: 0 },
+      { id: 'near_2', name: 'Nearby Place 2', lat: lat + 0.0008, lon: lng - 0.0006, distance_m: 90 },
+      { id: 'near_3', name: 'Nearby Place 3', lat: lat - 0.0011, lon: lng + 0.0012, distance_m: 140 }
     ];
 
     return res.json({ talukas });
