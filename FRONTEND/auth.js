@@ -131,7 +131,7 @@
       if (loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)) {
         try {
           // call /candidates
-          const candResp = await fetch('/candidates', {
+          const candResp = await fetch('/api/location/candidates', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy || 2000 })
