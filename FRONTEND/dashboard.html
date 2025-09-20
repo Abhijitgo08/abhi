@@ -44,33 +44,30 @@
     <h2 class="text-2xl font-semibold text-white mb-4">1. Input</h2>
     <div class="grid md:grid-cols-2 gap-6">
       <!-- Location -->
-  <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
-    <label class="block text-sm font-medium text-gray-700">Location</label>
-
-    <!-- dropdown will be populated dynamically by dashboard.js -->
-    <select id="locationSelect" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-          focus:ring-2 focus:ring-green-500 outline-none">
-        <option value="">Loading locations…</option>
-    </select>
-
-  <!-- small meta area showing address / coords -->
-      <p id="locationMeta" class="mt-2 text-sm text-gray-700 hidden"></p>
-  </div>
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Location</label>
+        <select id="locationSelect" 
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+          <option value="">Loading locations…</option>
+        </select>
+        <p id="locationMeta" class="mt-2 text-sm text-gray-700 hidden"></p>
+      </div>
 
       <!-- Number of Dwellers -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Number of Dwellers</label>
         <input type="number" id="dwellersInput" placeholder="e.g. 5" min="0"
           class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-          focus:ring-2 focus:ring-green-500 outline-none">
+                 focus:ring-2 focus:ring-green-500 outline-none">
       </div>
 
-      <!-- ✅ Roof Type Dropdown -->
+      <!-- Roof Type Dropdown -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Roof Type</label>
         <select id="roofTypeInput" 
           class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-          focus:ring-2 focus:ring-green-500 outline-none">
+                 focus:ring-2 focus:ring-green-500 outline-none">
           <option value="Concrete">Concrete</option>
           <option value="Metal">Metal</option>
         </select>
@@ -114,16 +111,14 @@
 
 <!-- Footer -->
 <footer class="bg-gray-900/70 backdrop-blur-md text-gray-200 text-center py-6">
-  <p>&copy; We’re actively working on — Open space inclusion,including 2D/3D visualization, groundwater analysis, and the remaining promised features — to make JalRakshak a truly end-to-end water sustainability platform.</p>
+  <p>&copy; We’re actively working on — Open space inclusion, including 2D/3D visualization, groundwater analysis, and the remaining promised features — to make JalRakshak a truly end-to-end water sustainability platform.</p>
 </footer>
 
-<!-- Turf for accurate geodesic area calculations -->
+<!-- Turf.js -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-
-<!-- html2canvas to capture map snapshot (optional, may fail due to CORS) -->
+<!-- html2canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-<!-- jsPDF (UMD build) -->
+<!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- Your app script -->
