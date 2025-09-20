@@ -186,62 +186,144 @@
   }
 
   // ---- Login handler (REPLACED) ----
-  async function loginHandler(e) {
-    e.preventDefault();
-    L('login clicked');
-    const email = document.getElementById('loginEmail')?.value.trim() || '';
-    const password = document.getElementById('loginPassword')?.value || '';
-    L('login payload', { email, password: password ? '●●●' : '(empty)' });
+  // ---- Login handler (improved: start geolocation immediately to trigger prompt) ----
+async function loginHandler(e) {
+  e.preventDefault();
+  L('login clicked');
+  const email = document.getElementById('loginEmail')?.value.trim() || '';
+  const password = document.getElementById('loginPassword')?.value || '';
+  L('login payload', { email, password: password ? '●●●' : '(empty)' });
 
-    try {
-      const res = await fetch(`${API_BASE}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await safeJson(res);
-      L('login response', res.status, data);
+  // Start geolocation immediately (so browser prompt appears while we do network work)
+  const geolocate = (() => {
+    // same helper as in handleLocationFlow but invoked earlier
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      const called = { done: false };
+      const timer = setTimeout(() => {
+        if (!called.done) { called.done = true; resolve(null); }
+      }, 10000); // give 10s to user to respond
 
-      if (res.ok && data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userName', (data.user && data.user.name) || '');
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          if (called.done) return;
+          called.done = true;
+          clearTimeout(timer);
+          resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy || 2000 });
+        },
+        err => {
+          if (called.done) return;
+          called.done = true;
+          clearTimeout(timer);
+          resolve(null); // we'll fallback to IP later
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  })();
 
-        // Persist actual user id: prefer data.user.* then decode JWT payload as fallback
-        let returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
-        if (!returnedUserId && data.token) {
-          const payload = jwtParsePayload(data.token);
-          if (payload) {
-            returnedUserId = payload.sub || payload.id || payload._id || (payload.user && (payload.user.id || payload.user._id));
-          }
-        }
-        if (returnedUserId) {
-          localStorage.setItem('userId', String(returnedUserId));
-        } else {
-          // ensure guest fallback exists
-          const clientIdKey = 'rwh_client_id';
-          if (!localStorage.getItem(clientIdKey)) localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
-        }
+  try {
+    // perform login while the geolocation permission prompt is visible
+    const res = await fetch(`${API_BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await safeJson(res);
+    L('login response', res.status, data);
 
-        // ensure we wait for location save to finish
-        const saveResult = await handleLocationFlow(data.token);
-        L('location save result', saveResult);
-
-        // optionally show a warning if save failed but still allow login
-        if (!saveResult.ok) {
-          // you may choose to proceed anyway or block login; we'll proceed but log
-          L('Location save failed or no options; proceeding to dashboard');
-        }
-
-        window.location.href = 'dashboard.html';
-        return;
-      } else {
-        alert(data.msg || data.message || `Login failed (status ${res.status})`);
-      }
-    } catch (err) {
-      L('login error', err);
-      alert('Network error — check console and server logs');
+    if (!(res.ok && data.token)) {
+      alert(data.msg || data.message || `Login failed (status ${res.status})`);
+      return;
     }
+
+    // save token & name asap
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userName', (data.user && data.user.name) || '');
+
+    // persist userId (try data.user then decode token)
+    let returnedUserId = (data.user && (data.user.id || data.user._id || data.user.userId)) || '';
+    if (!returnedUserId && data.token) {
+      const payload = jwtParsePayload(data.token);
+      if (payload) {
+        returnedUserId = payload.sub || payload.id || payload._id || (payload.user && (payload.user.id || payload.user._id));
+      }
+    }
+    if (returnedUserId) localStorage.setItem('userId', String(returnedUserId));
+    else {
+      const clientIdKey = 'rwh_client_id';
+      if (!localStorage.getItem(clientIdKey)) localStorage.setItem(clientIdKey, 'guest_' + Math.random().toString(36).slice(2,9));
+    }
+
+    // Wait for the geolocation promise we started earlier (or fallback to IP)
+    let loc = await geolocate;
+    if (!loc) {
+      // try IP fallback
+      try {
+        const r = await fetch('https://ipapi.co/json/');
+        if (r.ok) {
+          const j = await r.json();
+          loc = { latitude: Number(j.latitude), longitude: Number(j.longitude), accuracy: 5000 };
+        }
+      } catch (e) { L('ipFallback failed', e); }
+    }
+
+    // If we have a location, run the candidates + save flow (this reuses your existing handleLocationFlow logic)
+    if (loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)) {
+      try {
+        // call /api/location/candidates
+        const candResp = await fetch('/api/location/candidates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy || 2000 })
+        });
+        const candJson = await safeJson(candResp);
+        L('/candidates result', candResp.status, candJson);
+
+        // normalize and prepare options array
+        const options = (Array.isArray(candJson?.talukas) ? candJson.talukas : []).map(t => ({
+          id: t.id ? String(t.id) : (t.place_id || null),
+          lat: Number(t.lat ?? t.latitude ?? t.center?.lat),
+          lng: Number(t.lng ?? t.lon ?? t.center?.lon ?? t.longitude),
+          address: t.name || t.display_name || null,
+          distance_m: t.distance_m ?? t.distance ?? null,
+          raw: t
+        })).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
+
+        if (options.length) {
+          const authHeader = 'Bearer ' + data.token;
+          const xUserId = localStorage.getItem('userId') || data.token || localStorage.getItem('rwh_client_id');
+          const saveResp = await fetch('/api/location/options', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+              'x-user-id': xUserId
+            },
+            body: JSON.stringify({ options })
+          });
+          const saveJson = await safeJson(saveResp);
+          L('/api/location/options save response', saveResp.status, saveJson);
+        } else {
+          L('no options built from candidates');
+        }
+      } catch (err) {
+        L('candidates/save flow error', err);
+      }
+    } else {
+      L('no location available to fetch candidates');
+    }
+
+    // finally redirect (after everything attempted/saved)
+    window.location.href = 'dashboard.html';
+    return;
+
+  } catch (err) {
+    L('login error', err);
+    alert('Network error — check console and server logs');
   }
+}
+
 
   // ---- Attach listeners ----
   function init() {
