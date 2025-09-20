@@ -165,6 +165,49 @@
 
   window.handleLocationFlow = handleLocationFlow;
 
+   /* ---------- Persistent blocking overlay (no user ack required) ---------- */
+function ensureBlockingOverlay() {
+  if (document.getElementById('auth-blocking-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'auth-blocking-overlay';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.display = 'none';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.background = 'rgba(0,0,0,0.45)';
+  overlay.style.zIndex = '99999';
+  overlay.style.pointerEvents = 'auto';
+  overlay.style.backdropFilter = 'blur(2px)';
+  overlay.innerHTML = `
+    <div style="max-width:90%;width:360px;background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);text-align:center;font-family:Inter, system-ui, -apple-system;">
+      <div style="font-size:18px;font-weight:600;color:#094d22;margin-bottom:8px">Please wait</div>
+      <div style="font-size:14px;color:#374151;margin-bottom:12px">Fetching your location — this may take a moment</div>
+      <div aria-hidden="true" style="font-size:22px;line-height:1">⏳</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function showBlockingOverlay(msg) {
+  ensureBlockingOverlay();
+  const overlay = document.getElementById('auth-blocking-overlay');
+  if (!overlay) return;
+  if (msg) {
+    const subtitle = overlay.querySelector('div > div:nth-child(2)');
+    if (subtitle) subtitle.textContent = msg;
+  }
+  overlay.style.display = 'flex';
+}
+
+function hideBlockingOverlay() {
+  const overlay = document.getElementById('auth-blocking-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+}
+
   // ---- Signup ----
   async function signupHandler(e) {
     e.preventDefault();
@@ -187,6 +230,7 @@
         localStorage.setItem('userName', data.user?.name || '');
         localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 
+        showBlockingOverlay('Fetching your location — please wait');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
