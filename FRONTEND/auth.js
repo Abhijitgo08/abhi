@@ -77,15 +77,22 @@
     const candJson = await safeJson(candResp);
     L('/candidates response', candResp.status, candJson);
 
-    const options = (candJson.talukas || []).map(t => ({
-      id: t.id,
-      lat: t.lat,
-      lng: t.lon || t.lng,
-      address: t.name,
-      distance_m: t.distance_m,
-      raw: t
-    }));
-    L('normalized options', options);
+// Also preserve name/display_name/address fallbacks.
+const options = (candJson.talukas || []).map(t => {
+  const lat = Number(t.lat ?? t.latitude ?? (t.center && t.center.lat));
+  const lng = Number(t.lng ?? t.lon ?? t.longitude ?? (t.center && t.center.lon));
+  return {
+    id: t.id || t.place_id || null,
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+    address: t.address || t.display_name || t.name || null,
+    distance_m: Number(t.distance_m ?? t.distance ?? null) || null,
+    raw: t
+  };
+}).filter(o => Number.isFinite(o.lat) && Number.isFinite(o.lng));
+
+L('normalized options (client)', options);
+
 
     if (!options.length) {
       L('❌ No normalized options returned from candidates; skipping save');
@@ -93,27 +100,15 @@
     }
 
     // save options
-    // ensure numeric lat/lng
-const scrubbedOptions = options.map(o => ({
-  id: o.id || null,
-  lat: Number(o.lat),
-  lng: Number(o.lng),
-  address: o.address || null,
-  distance_m: Number(o.distance_m) || null,
-  raw: o.raw || null
-}));
-
-const saveResp = await fetch('/api/location/options', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': authHeader,
-    'x-user-id': userId
-  },
-  // also include userId in body so server can pick it from body if header missing
-  body: JSON.stringify({ userId, options: scrubbedOptions })
-});
-
+    const saveResp = await fetch('/api/location/options', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'x-user-id': userId
+      },
+      body: JSON.stringify({ options })
+    });
     const saveJson = await safeJson(saveResp);
     L('/options save response', saveResp.status, saveJson);
 
