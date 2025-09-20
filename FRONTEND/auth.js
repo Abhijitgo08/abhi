@@ -38,6 +38,21 @@
     };
   }
 
+  // ---------- helper: set button loading state ----------
+  function setBtnLoading(btn, loading, text) {
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.classList.toggle('opacity-60', loading);
+    btn.classList.toggle('cursor-not-allowed', loading);
+    if (loading) {
+      btn._oldHtml = btn.innerHTML;
+      btn.innerHTML = (text || 'Please wait...') + ' <span class="animate-pulse">⏳</span>';
+    } else if (btn._oldHtml) {
+      btn.innerHTML = btn._oldHtml;
+      delete btn._oldHtml;
+    }
+  }
+
   // ---- Location flow ----
   async function handleLocationFlow(token) {
     L(">>> entered handleLocationFlow");
@@ -49,7 +64,6 @@
       return { ok: false, reason: 'no-userid' };
     }
 
-    // get geolocation (with timeout + error logs)
     function getGeolocationPromise(timeout = 10000) {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
@@ -94,7 +108,6 @@
       return { ok: false, reason: 'no-location' };
     }
 
-    // call candidates
     const candResp = await fetch('/api/location/candidates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -154,6 +167,9 @@
   // ---- Signup ----
   async function signupHandler(e) {
     e.preventDefault();
+    const btn = document.querySelector('#signupForm button[type="submit"]');
+    setBtnLoading(btn, true, 'Signing up');
+
     const name = document.getElementById('signupName')?.value.trim();
     const email = document.getElementById('signupEmail')?.value.trim();
     const password = document.getElementById('signupPassword')?.value;
@@ -177,12 +193,17 @@
     } catch (err) {
       console.error(err);
       alert('Network error');
+    } finally {
+      setBtnLoading(btn, false);
     }
   }
 
   // ---- Login ----
   async function loginHandler(e) {
     e.preventDefault();
+    const btn = document.querySelector('#loginForm button[type="submit"]');
+    setBtnLoading(btn, true, 'Logging in');
+
     const email = document.getElementById('loginEmail')?.value.trim();
     const password = document.getElementById('loginPassword')?.value;
 
@@ -205,6 +226,8 @@
     } catch (err) {
       console.error(err);
       alert('Network error');
+    } finally {
+      setBtnLoading(btn, false);
     }
   }
 
@@ -235,7 +258,7 @@
       sf.addEventListener('submit', singleSubmission(signupHandler));
     }
 
-    L('auth handlers attached (with debounce)');
+    L('auth handlers attached (with debounce + loading state)');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
