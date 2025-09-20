@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const connectDB = require('./config/db');
+const locationRoutes = require('./routes/location'); // adjust path if your routes folder is elsewhere
+
 
 const app = express();
 
@@ -15,6 +17,7 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rainfall', require('./routes/rainfallRoutes'));
 app.use('/api/calc', require('./routes/calcRoutes'));
+app.use('/api/location', locationRoutes);
 
 // ===== Health check =====
 app.get('/api/health', (req, res) => res.json({ ok: true, time: Date.now() }));
