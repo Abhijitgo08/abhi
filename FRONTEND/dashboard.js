@@ -21,7 +21,9 @@ if (!token) window.location.href = "auth.html";
 userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- MAP SETUP -----------------
+// ----------------- MAP SETUP -----------------
 const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+
 // --- Base layers ---
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
@@ -44,10 +46,10 @@ const esriLabels = L.tileLayer(
   }
 );
 
-// --- Add default OSM to start ---
+// Add default layer
 osm.addTo(map);
 
-// --- Switch layers dynamically ---
+// --- Dynamic switch between OSM and Satellite ---
 map.on("zoomend", () => {
   const z = map.getZoom();
   if (z > 13) {
@@ -64,6 +66,24 @@ map.on("zoomend", () => {
     }
   }
 });
+
+// ----------------- Draw Control (Roof Marking) -----------------
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+const drawControl = new L.Control.Draw({
+  draw: {
+    polyline: false,
+    rectangle: false,
+    circle: false,
+    marker: false,
+    circlemarker: false,
+    polygon: { allowIntersection: false, showArea: true, showLength: false }
+  },
+  edit: { featureGroup: drawnItems }
+});
+map.addControl(drawControl);
+
 // Utility: convert Leaflet latlngs to GeoJSON polygon coordinates for turf
 function latlngsToTurfPolygon(latlngs) {
   const coords = latlngs.map((p) => [p.lng, p.lat]);
