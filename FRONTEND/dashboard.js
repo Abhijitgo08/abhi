@@ -346,33 +346,76 @@ if (locationSelect) {
 loadLocationOptions();
 
 // ----------------- ANALYSIS (call backend) -----------------
+// ----------------- ANALYSIS (call backend) -----------------
 analyzeBtn.addEventListener("click", async () => {
-  if (!window.selectedRoofArea || window.selectedRoofArea <= 0) {
+  // Ensure roof polygon exists / area is selected
+  const roofArea = window.selectedRoofArea || 0;
+  if (!roofArea || roofArea <= 0) {
     alert("Please draw your roof polygon on the map first!");
     return;
   }
 
+  // Show running UI
   analysisResult.classList.remove("hidden");
   analysisResult.innerHTML = `<p class="text-lg text-gray-500">🔄 Running analysis...</p>`;
 
-  // Use selected location from dropdown as district if present
-  let district = "Pune";
+  // 1) Try to obtain lat/lng: prefer selected dropdown location
+  let lat = NaN, lng = NaN;
   if (locationSelect && locationSelect.selectedOptions.length > 0) {
     const opt = locationSelect.selectedOptions[0];
-    if (opt && opt.dataset.loc && opt.value !== '') {
+    if (opt && opt.dataset && opt.dataset.loc && opt.value !== '') {
       try {
         const loc = JSON.parse(opt.dataset.loc);
-        district = loc.address || `${loc.lat},${loc.lng}`;
+        lat = Number(loc.lat);
+        lng = Number(loc.lng);
       } catch (err) {
-        console.warn('Could not parse selected location for district', err);
+        console.warn("Could not parse dataset.loc from selected option", err);
       }
     }
   }
 
-  const dwellers = parseInt(document.getElementById("dwellersInput").value) || 4;
+  // 2) If dropdown didn't provide coords, fallback to polygon centroid (if drawn)
+  if ((isNaN(lat) || isNaN(lng)) && typeof drawnItems !== "undefined" && drawnItems.getLayers().length > 0) {
+    try {
+      const layer = drawnItems.getLayers()[0];
+      if (layer && typeof layer.getBounds === "function") {
+        const c = layer.getBounds().getCenter();
+        lat = Number(c.lat);
+        lng = Number(c.lng);
+      } else if (layer && typeof layer.getLatLngs === "function") {
+        const latlngs = layer.getLatLngs()[0] || [];
+        if (latlngs && latlngs.length) {
+          // try turf centroid if available
+          const coords = latlngs.map(p => [p.lng, p.lat]);
+          if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) coords.push(coords[0]);
+          if (window.turf) {
+            const poly = turf.polygon([coords]);
+            const c = turf.centroid(poly);
+            lat = c?.geometry?.coordinates?.[1];
+            lng = c?.geometry?.coordinates?.[0];
+          } else {
+            // simple average fallback
+            const avg = coords.reduce((acc, cur) => [acc[0]+cur[0], acc[1]+cur[1]], [0,0]).map(v=>v/coords.length);
+            lng = avg[0]; lat = avg[1];
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not determine polygon center", err);
+    }
+  }
+
+  // Get other inputs
+  const dwellers = parseInt(document.getElementById("dwellersInput").value) || NaN;
   const roofTypeEl = document.getElementById("roofTypeInput") || document.getElementById("roofType");
-  const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : "flat";
-  const roofArea = window.selectedRoofArea;
+  const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : null;
+
+  // Validate required fields (backend expects: lat, lng, roofArea, roofType, dwellers)
+  if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers)) {
+    analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers</p>`;
+    console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers });
+    return;
+  }
 
   try {
     const url = API_BASE + '/api/calc';
@@ -382,17 +425,19 @@ analyzeBtn.addEventListener("click", async () => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ district, dwellers, roofType, roofArea })
+      body: JSON.stringify({ lat, lng, roofArea, roofType, dwellers })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
 
-    if (!data.success) {
-      analysisResult.innerHTML = `<p class="text-red-600">❌ ${data.message || "Calculation failed"}</p>`;
+    if (!res.ok || !data || !data.success) {
+      const msg = (data && data.message) ? data.message : `Server error (${res.status})`;
+      analysisResult.innerHTML = `<p class="text-red-600">❌ ${msg}</p>`;
+      console.error("Calculation failed", res.status, data);
       return;
     }
 
-    // Show result summary
+    // Show result summary (keeps your existing UI)
     analysisResult.innerHTML = `
       <p class="text-lg">Feasibility: 
         <span class="font-bold ${data.feasibility === "YES" ? "text-green-600" : "text-red-600"}">
@@ -413,7 +458,7 @@ analyzeBtn.addEventListener("click", async () => {
       </p>
     `;
 
-    // design + impact
+    // design + impact (same as before)
     designCard.classList.remove("hidden");
     designCard.innerHTML = `
       <h3 class="text-xl font-semibold text-blue-600">Suggested Structure</h3>
@@ -445,7 +490,7 @@ analyzeBtn.addEventListener("click", async () => {
       await generatePDF(data);
     });
 
-    // optional: show govt docs (simple modal or link) — for demo we'll alert
+    // optional: show govt docs (simple modal or link)
     document.getElementById("govtDocsBtn").addEventListener("click", () => {
       alert("Govt documentation checklist will be shown (you can convert this to a modal/pdf).");
     });
@@ -455,6 +500,7 @@ analyzeBtn.addEventListener("click", async () => {
     analysisResult.innerHTML = `<p class="text-red-600">❌ Error: Could not connect to server</p>`;
   }
 });
+
 
 // ----------------- PDF GENERATION -----------------
 async function generatePDF(reportData) {
