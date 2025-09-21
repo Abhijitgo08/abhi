@@ -34,7 +34,8 @@ const esriSat = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 
   {
     attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
-    maxZoom: 19
+    maxZoom: 19,
+    maxNativeZoom: 17
   }
 );
 
@@ -42,7 +43,8 @@ const esriLabels = L.tileLayer(
   "https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", 
   {
     attribution: "Labels © Esri",
-    maxZoom: 19
+    maxZoom: 19,
+    maxNativeZoom: 17
   }
 );
 
