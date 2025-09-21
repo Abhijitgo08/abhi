@@ -108,6 +108,65 @@ function showLocationMeta(loc) {
   locationMeta.textContent = `${loc.address || 'Unknown'} — lat:${loc.lat ?? 'N/A'}, lng:${loc.lng ?? 'N/A'}`;
 }
 
+/**
+ * Populate select with location options.
+ * Minimal, safe implementation — creates options and stores a JSON string on data-loc.
+ * Keeps duplicate addresses if returned by server (if you want dedupe we can add it).
+ */
+function populateLocationSelect(options = [], chosenLocation = null) {
+  if (!locationSelect) return;
+
+  // start fresh with placeholder
+  locationSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '-- Select Location --';
+  locationSelect.appendChild(placeholder);
+
+  options.forEach((loc, i) => {
+    const opt = document.createElement('option');
+    const idStr = (loc && loc.id) ? String(loc.id) : ('loc_' + i);
+    opt.value = idStr;
+    opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.address || loc.lat}, ${loc.lng}` : `Location ${i+1}`);
+
+    // store minimal useful object so caller can POST it back
+    opt.dataset.loc = JSON.stringify({
+      id: idStr,
+      address: loc.address || null,
+      lat: loc.lat ?? null,
+      lng: loc.lng ?? null,
+      // keep any other raw data if present (optional)
+      raw: loc.raw ?? null,
+      distance_m: loc.distance_m ?? null
+    });
+
+    locationSelect.appendChild(opt);
+  });
+
+  // preselect chosenLocation if provided (match by id or coords)
+  if (chosenLocation) {
+    const chosenId = (chosenLocation.id !== undefined) ? String(chosenLocation.id) : null;
+    for (let i = 0; i < locationSelect.options.length; i++) {
+      const o = locationSelect.options[i];
+      if (!o.dataset.loc) continue;
+      try {
+        const L = JSON.parse(o.dataset.loc);
+        if (chosenId && String(L.id) === chosenId) {
+          locationSelect.selectedIndex = i;
+          showLocationMeta(L);
+          break;
+        }
+        if (chosenLocation.lat !== undefined && chosenLocation.lng !== undefined &&
+            Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng)) {
+          locationSelect.selectedIndex = i;
+          showLocationMeta(L);
+          break;
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  }
+}
+
 /*
   loadLocationOptions:
    - first tries GET with Authorization
