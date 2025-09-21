@@ -114,10 +114,14 @@ function showLocationMeta(loc) {
    - if response non-OK (400/401/5xx), logs response body and then tries a second GET without Authorization (fallback test)
    - if still non-OK, it writes the server message into the dropdown and logs details to console
 */
+// Replace the existing loadLocationOptions() with this function
 async function loadLocationOptions() {
   if (!locationSelect) return;
 
-  const url = API_BASE + '/api/location/options';
+  // include userId query param if present (server requires valid userId)
+  const userId = localStorage.getItem('userId') || '';
+  const qs = userId ? ('?userId=' + encodeURIComponent(userId)) : '';
+  const url = API_BASE + '/api/location/options' + qs;
 
   async function doFetch(withAuth) {
     const headers = {};
@@ -127,18 +131,16 @@ async function loadLocationOptions() {
       const text = await res.text().catch(() => '');
       let json = {};
       try { json = text ? JSON.parse(text) : {}; } catch (e) { /* not json */ }
-
       return { ok: res.ok, status: res.status, text, json };
     } catch (err) {
       return { ok: false, status: 0, text: '', json: null, error: err };
     }
   }
 
-  // 1) Try with Authorization header (original behavior)
+  // 1) Try with Authorization header (if token present)
   const primary = await doFetch(true);
   console.log('loadLocationOptions primary result:', primary);
 
-  // If primary succeeded, populate
   if (primary.ok) {
     const options = Array.isArray(primary.json.locationOptions) ? primary.json.locationOptions : [];
     const chosen = primary.json.chosenLocation || null;
@@ -146,7 +148,7 @@ async function loadLocationOptions() {
     return;
   }
 
-  // 2) If primary failed, try once without Authorization to detect whether server rejects auth header
+  // 2) Fallback: try without Authorization (debug)
   console.warn('Primary /api/location/options fetch failed', primary.status, primary.text || primary.error);
   const fallback = await doFetch(false);
   console.log('loadLocationOptions fallback result (no auth):', fallback);
@@ -155,62 +157,33 @@ async function loadLocationOptions() {
     const options = Array.isArray(fallback.json.locationOptions) ? fallback.json.locationOptions : [];
     const chosen = fallback.json.chosenLocation || null;
     populateLocationSelect(options, chosen);
-    // also warn to inspect token/auth on server
-    console.warn('Options loaded without Authorization header — check whether backend expects a token or rejects it.');
+    console.warn('Options loaded without Authorization header — check backend auth rules.');
     return;
   }
 
-  // If both failed, show server message in dropdown for debugging
+  // 3) If both failed, show server message or helpful hint
   const debugMessage = primary.text || fallback.text || (primary.error ? String(primary.error) : `HTTP ${primary.status} / HTTP ${fallback.status}`);
-  console.error('Failed to load location options (both attempts). Server said:', debugMessage);
 
+  // If there was no userId, give a clearer hint
+  if (!userId) {
+    locationSelect.innerHTML = '';
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = 'Error: missing userId in localStorage (please login again)';
+    locationSelect.appendChild(o);
+    console.error('loadLocationOptions failed: no userId in localStorage and server response:', debugMessage);
+    return;
+  }
+
+  // Otherwise show server response snippet
   locationSelect.innerHTML = '';
   const o = document.createElement('option');
   o.value = '';
   o.textContent = `Error loading locations: ${debugMessage.substring(0, 120)}${debugMessage.length>120?'...':''}`;
   locationSelect.appendChild(o);
+  console.error('Failed to load location options (both attempts). Server said:', debugMessage);
 }
 
-// ---------- Simple dropdown + save selected location (unchanged) ----------
-
-// populate dropdown with address text
-function populateLocationSelect(options = [], chosenLocation = null) {
-  if (!locationSelect) return;
-  locationSelect.innerHTML = '<option value=\"\">-- Select Location --</option>';
-
-  options.forEach((loc, i) => {
-    const opt = document.createElement('option');
-    // prefer string id, fallback to index
-    const idStr = (loc.id && String(loc.id)) || ('loc_' + i);
-    opt.value = idStr;
-    opt.textContent = loc.address || (loc.lat && loc.lng ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
-    // store the full object so we can send it back on selection
-    opt.dataset.loc = JSON.stringify({
-      id: idStr,
-      address: loc.address || null,
-      lat: loc.lat ?? null,
-      lng: loc.lng ?? null
-    });
-    locationSelect.appendChild(opt);
-  });
-
-  // preselect chosenLocation if provided
-  if (chosenLocation) {
-    for (let i = 0; i < locationSelect.options.length; i++) {
-      const o = locationSelect.options[i];
-      if (!o.dataset.loc) continue;
-      try {
-        const L = JSON.parse(o.dataset.loc);
-        if (L.id === String(chosenLocation.id) ||
-            (chosenLocation.lat && Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng))) {
-          locationSelect.selectedIndex = i;
-          showLocationMeta(L);
-          break;
-        }
-      } catch(e) { /* ignore */ }
-    }
-  }
-}
 
 // save chosen location to server
 async function saveChosenLocation(locObj) {
