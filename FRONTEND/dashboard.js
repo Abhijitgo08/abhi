@@ -22,7 +22,6 @@ userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- MAP SETUP -----------------
 const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
-// Satellite imagery
 // --- Base layers ---
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
@@ -65,9 +64,6 @@ map.on("zoomend", () => {
     }
   }
 });
-
-map.addControl(drawControl);
-
 // Utility: convert Leaflet latlngs to GeoJSON polygon coordinates for turf
 function latlngsToTurfPolygon(latlngs) {
   const coords = latlngs.map((p) => [p.lng, p.lat]);
