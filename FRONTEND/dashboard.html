@@ -72,6 +72,28 @@
           <option value="Metal">Metal</option>
         </select>
       </div>
+
+      <!-- Floors (new) -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Floors (number)</label>
+        <input type="number" id="floors" placeholder="e.g. 1" min="0" value="1"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+        <p class="mt-2 text-xs text-gray-600">Used to compute pipe length = floors × floor height.</p>
+      </div>
+
+      <!-- Soil Type (new) -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Soil Type</label>
+        <select id="soilType"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+          <option value="loamy" selected>Loamy</option>
+          <option value="sandy">Sandy</option>
+          <option value="clayey">Clayey</option>
+        </select>
+        <p class="mt-2 text-xs text-gray-600">Soil affects infiltration fraction used for pit sizing.</p>
+      </div>
     </div>
   </section>
 

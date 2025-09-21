@@ -4,6 +4,7 @@
 // - Single drawnItems + drawControl
 // - Smart OSM <-> Satellite switching
 // - Keeps your existing loadLocationOptions(), analysis and PDF logic
+// - READS `floors` and `soilType` from UI (not constants). Falls back gently if missing.
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -62,18 +63,18 @@ map.on('zoomend', () => {
   const z = map.getZoom();
 
   if (z >= 14 && z <= 20) {
-  if (!map.hasLayer(esriSat)) {
-    if (map.hasLayer(osm)) map.removeLayer(osm);
-    esriSat.addTo(map);
-    esriLabels.addTo(map);
+    if (!map.hasLayer(esriSat)) {
+      if (map.hasLayer(osm)) map.removeLayer(osm);
+      esriSat.addTo(map);
+      esriLabels.addTo(map);
+    }
+  } else {
+    if (!map.hasLayer(osm)) {
+      if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
+      if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
+      osm.addTo(map);
+    }
   }
-} else {
-  if (!map.hasLayer(osm)) {
-    if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
-    if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
-    osm.addTo(map);
-  }
-}
 });
 
 // ----------------- Draw Control (single, correct setup) -----------------
@@ -410,22 +411,40 @@ analyzeBtn.addEventListener("click", async () => {
   const roofTypeEl = document.getElementById("roofTypeInput") || document.getElementById("roofType");
   const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : null;
 
+  // NEW: read floors from UI (if present). If missing, try parseInt on #floors; else NaN.
+  let floors = NaN;
+  const floorsEl = document.getElementById("floors");
+  if (floorsEl) {
+    const fRaw = (floorsEl.value ?? '').toString().trim();
+    floors = fRaw === '' ? NaN : parseInt(fRaw);
+    if (!isNaN(floors) && floors < 0) floors = NaN;
+  }
+
+  // NEW: read soilType from UI if present
+  const soilEl = document.getElementById("soilType");
+  const soilType = soilEl ? (soilEl.value || null) : null;
+
   // Validate required fields (backend expects: lat, lng, roofArea, roofType, dwellers)
-  if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers)) {
-    analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers</p>`;
-    console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers });
+  if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers) || isNaN(floors)) {
+    analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers, floors</p>`;
+    console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers, floors });
     return;
   }
 
   try {
     const url = API_BASE + '/api/calc';
+
+    // Build payload: include floors and soilType if available
+    const payload = { lat, lng, roofArea, roofType, dwellers, floors };
+    if (soilType) payload.soilType = soilType;
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ lat, lng, roofArea, roofType, dwellers })
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json().catch(() => null);
@@ -437,24 +456,31 @@ analyzeBtn.addEventListener("click", async () => {
       return;
     }
 
+    // Normalize server fields (be tolerant of different naming):
+    const litersPerYear = data.runoff_liters_per_year ?? data.litersPerYear ?? data.runoff ?? 0;
+    const estimatedCost = data.costs?.total_estimated_installation_cost ?? data.estimatedCost ?? data.cost ?? 0;
+    const suffMonths = data.sufficiencyMonths ?? data.sufficiency_months ?? data.sufficiency ?? null;
+    const suggestion = data.suggestion ?? data.recommendation ?? null;
+    const feasibilityFlag = (typeof data.feasibility === 'boolean') ? (data.feasibility ? "YES" : "NO") : (data.feasibility ?? ((data.coverageRatio && data.coverageRatio >= 0.25) ? "YES" : "NO"));
+
     // Show result summary (keeps your existing UI)
     analysisResult.innerHTML = `
       <p class="text-lg">Feasibility: 
-        <span class="font-bold ${data.feasibility === "YES" ? "text-green-600" : "text-red-600"}">
-          ${data.feasibility}
+        <span class="font-bold ${feasibilityFlag === "YES" ? "text-green-600" : "text-red-600"}">
+          ${feasibilityFlag}
         </span>
       </p>
       <p class="mt-2">Estimated Harvesting Capacity: 
-        <span class="font-bold">${data.litersPerYear.toLocaleString()} Liters/year</span>
+        <span class="font-bold">${(litersPerYear || 0).toLocaleString()} Liters/year</span>
       </p>
       <p class="mt-2">Estimated Cost: 
-        <span class="font-bold text-yellow-700">₹${data.estimatedCost.toLocaleString()}</span>
+        <span class="font-bold text-yellow-700">₹${Number(estimatedCost || 0).toLocaleString()}</span>
       </p>
       <p class="mt-2">Water Sufficiency: 
-        <span class="font-bold">${data.sufficiencyMonths} months</span>
+        <span class="font-bold">${suffMonths !== null ? suffMonths : (data.coverageRatio ? Math.round((data.coverageRatio || 0) * 12) : "N/A")} months</span>
       </p>
       <p class="mt-2">Suggestion: 
-        <span class="font-bold text-blue-600">${data.suggestion}</span>
+        <span class="font-bold text-blue-600">${suggestion || (data.filters?.chosen?.name) || "Consider Recharge Pit with supplemental sources"}</span>
       </p>
     `;
 
@@ -462,19 +488,19 @@ analyzeBtn.addEventListener("click", async () => {
     designCard.classList.remove("hidden");
     designCard.innerHTML = `
       <h3 class="text-xl font-semibold text-blue-600">Suggested Structure</h3>
-      <p class="mt-2 text-gray-700">${data.suggestion}</p>
-      <p class="mt-1 text-gray-700">Estimated Cost: ₹${data.estimatedCost.toLocaleString()}</p>
+      <p class="mt-2 text-gray-700">${suggestion || (data.filters?.chosen?.name) || "See detailed recommendations below."}</p>
+      <p class="mt-1 text-gray-700">Estimated Cost: ₹${Number(estimatedCost || 0).toLocaleString()}</p>
     `;
 
     outputCard.classList.remove("hidden");
     outputCard.innerHTML = `
       <p class="text-lg font-medium">💧 You can save 
-        <span class="font-bold text-green-700">${data.litersPerYear.toLocaleString()} Liters/year</span>
+        <span class="font-bold text-green-700">${(litersPerYear || 0).toLocaleString()} Liters/year</span>
       </p>
       <p class="mt-2">📅 Covers 
-        <span class="font-bold">${data.sufficiencyMonths} months</span> of family needs</p>
+        <span class="font-bold">${suffMonths !== null ? suffMonths : (data.coverageRatio ? Math.round((data.coverageRatio || 0) * 12) : "N/A")} months</span> of family needs</p>
       <p class="mt-2">🏙 Equivalent to water for 
-        <span class="font-bold">${Math.round(data.litersPerYear / 10000)} households</span></p>
+        <span class="font-bold">${Math.round((litersPerYear || 0) / 10000)} households</span></p>
       <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
         <button id="downloadReportBtn" class=" no-pdf bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
           Download Technical Report (PDF)
@@ -485,9 +511,21 @@ analyzeBtn.addEventListener("click", async () => {
       </div>
     `;
 
-    // wire download button
+    // wire download button - pass a consistent reportData object expected by generatePDF
     document.getElementById("downloadReportBtn").addEventListener("click", async () => {
-      await generatePDF(data);
+      const reportData = {
+        district: (locationSelect.selectedOptions[0] && locationSelect.selectedOptions[0].dataset.loc) ? JSON.parse(locationSelect.selectedOptions[0].dataset.loc).address : "",
+        roofType,
+        dwellers,
+        rainfall_mm: data.rainfall_mm ?? data.rainfall ?? null,
+        litersPerYear,
+        estimatedCost,
+        sufficiencyMonths: suffMonths,
+        suggestion: suggestion,
+        // include raw server payload for full detail in PDF if needed
+        server: data
+      };
+      await generatePDF(reportData);
     });
 
     // optional: show govt docs (simple modal or link)
