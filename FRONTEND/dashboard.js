@@ -23,45 +23,49 @@ userName.textContent = localStorage.getItem("userName") || "User";
 // ----------------- MAP SETUP -----------------
 const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
 // Satellite imagery
+// --- Base layers ---
+const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap contributors",
+  maxZoom: 19
+});
+
 const esriSat = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 
   {
-    attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
     maxZoom: 19
   }
 );
 
-// Labels/roads overlay
 const esriLabels = L.tileLayer(
   "https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", 
   {
     attribution: "Labels © Esri",
-    maxZoom: 19,
-    pane: "overlayPane" // ensures it floats on top
+    maxZoom: 19
   }
 );
 
-// Add both to map
-esriSat.addTo(map);
-esriLabels.addTo(map);
+// --- Add default OSM to start ---
+osm.addTo(map);
 
-
-
-// Draw Control
-const drawnItems = new L.FeatureGroup();
-map.addLayer(drawnItems);
-
-const drawControl = new L.Control.Draw({
-  draw: {
-    polyline: false,
-    rectangle: false,
-    circle: false,
-    marker: false,
-    circlemarker: false,
-    polygon: { allowIntersection: false, showArea: true, showLength: false }
-  },
-  edit: { featureGroup: drawnItems }
+// --- Switch layers dynamically ---
+map.on("zoomend", () => {
+  const z = map.getZoom();
+  if (z > 13) {
+    if (!map.hasLayer(esriSat)) {
+      map.removeLayer(osm);
+      esriSat.addTo(map);
+      esriLabels.addTo(map);
+    }
+  } else {
+    if (!map.hasLayer(osm)) {
+      map.removeLayer(esriSat);
+      map.removeLayer(esriLabels);
+      osm.addTo(map);
+    }
+  }
 });
+
 map.addControl(drawControl);
 
 // Utility: convert Leaflet latlngs to GeoJSON polygon coordinates for turf
