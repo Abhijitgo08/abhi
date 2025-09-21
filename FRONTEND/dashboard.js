@@ -38,7 +38,7 @@ const esriSat = L.tileLayer(
   {
     attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
     maxNativeZoom: 17, // imagery only to z17 in many places
-    maxZoom: 19
+    maxZoom: 20
   }
 );
 
@@ -61,7 +61,7 @@ osm.addTo(map);
 map.on('zoomend', () => {
   const z = map.getZoom();
 
-  if (z >= 14 && z <= 17) {
+  if (z >= 14 && z <= 19) {
     if (!map.hasLayer(esriSat)) {
       if (map.hasLayer(osm)) map.removeLayer(osm);
       esriSat.addTo(map);
