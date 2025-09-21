@@ -269,6 +269,7 @@ async function saveChosenLocation(locObj) {
 }
 
 // wire selection change: when user selects, show meta and save
+// wire selection change: when user selects, show meta, save, and move map
 if (locationSelect) {
   locationSelect.addEventListener('change', (e) => {
     const opt = e.target.selectedOptions[0];
@@ -290,8 +291,14 @@ if (locationSelect) {
 
     // save (fire-and-forget)
     saveChosenLocation(loc);
+
+    // ✅ Center map on coordinates (no pin)
+    if (loc.lat !== null && loc.lng !== null) {
+      map.setView([loc.lat, loc.lng], 12); // zoom=16, tweak as needed
+    }
   });
 }
+
 
 // initialize dropdown
 loadLocationOptions();
