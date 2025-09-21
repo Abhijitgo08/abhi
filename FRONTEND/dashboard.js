@@ -1,8 +1,5 @@
 // dashboard.js
-// Ready-to-paste. Expects:
-// GET  /api/location/options  -> { success:true, locationOptions: [...], chosenLocation: {...} }
-// POST /api/location/choice   -> accepts { choice: {...} } and returns { success:true, chosenLocation: ... }
-// POST /api/calc              -> existing analysis endpoint
+// Cleaned and ready-to-paste version. Includes deduping and single implementation for location dropdown.
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -98,7 +95,7 @@ map.on(L.Draw.Event.EDITED, (e) => {
   });
 });
 
-// ----------------- LOCATION: load, display, save -----------------
+// ----------------- LOCATION: load, display, save (clean) -----------------
 function showLocationMeta(loc) {
   if (!locationMeta) return;
   if (!loc) {
@@ -117,63 +114,77 @@ async function loadLocationOptions() {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
     });
-    const json = await res.json();
-    if (!json || !json.success) {
-      // if success flag absent still try to read locationOptions
-      const opts = (json && json.locationOptions) ? json.locationOptions : [];
-      populateLocationSelect(opts, json && json.chosenLocation);
-      return;
-    }
-    const options = json.locationOptions || [];
-    populateLocationSelect(options, json.chosenLocation || null);
+    const json = await res.json().catch(() => ({}));
+    const options = Array.isArray(json.locationOptions) ? json.locationOptions : [];
+    const chosen = json.chosenLocation || null;
+    populateLocationSelect(options, chosen);
   } catch (err) {
     console.error('loadLocationOptions error', err);
-    locationSelect.innerHTML = '<option value="">Error loading locations</option>';
+    if (locationSelect) locationSelect.innerHTML = '<option value="">Error loading locations</option>';
   }
 }
 
-// ---------- Simple dropdown + save selected location (paste into dashboard.js) ----------
-
-// populate dropdown with address text
+/**
+ * Populate select with location options.
+ * - options: array of objects { id, lat, lng, address, ... }
+ * - chosenLocation: optional object to preselect (may match by id or coordinates)
+ */
 function populateLocationSelect(options = [], chosenLocation = null) {
   if (!locationSelect) return;
-  locationSelect.innerHTML = '<option value="">-- Select Location --</option>';
 
+  // start with placeholder
+  locationSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '-- Select Location --';
+  locationSelect.appendChild(placeholder);
+
+  // dedupe by address+lat+lng (sometimes API returns duplicates)
+  const seen = new Set();
   options.forEach((loc, i) => {
+    // normalize fields
+    const id = (loc && loc.id) ? String(loc.id) : 'loc_' + i;
+    const lat = (loc && (loc.lat !== undefined)) ? Number(loc.lat) : null;
+    const lng = (loc && (loc.lng !== undefined)) ? Number(loc.lng) : null;
+    const address = (loc && loc.address) ? String(loc.address) : (lat !== null && lng !== null ? `${lat}, ${lng}` : `Location ${i+1}`);
+
+    const dedupeKey = `${address.trim()}|${lat}|${lng}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+
     const opt = document.createElement('option');
-    // prefer string id, fallback to index
-    const idStr = (loc.id && String(loc.id)) || ('loc_' + i);
-    opt.value = idStr;
-    opt.textContent = loc.address || (loc.lat && loc.lng ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
-    // store the full object so we can send it back on selection
-    opt.dataset.loc = JSON.stringify({
-      id: idStr,
-      address: loc.address || null,
-      lat: loc.lat ?? null,
-      lng: loc.lng ?? null
-    });
+    opt.value = id;
+    opt.textContent = address;
+    // store full object so we can easily send it back
+    opt.dataset.loc = JSON.stringify({ id, address, lat, lng });
     locationSelect.appendChild(opt);
   });
 
-  // preselect chosenLocation if provided
+  // try to preselect chosenLocation if provided
   if (chosenLocation) {
+    const chosenId = (chosenLocation.id !== undefined) ? String(chosenLocation.id) : null;
     for (let i = 0; i < locationSelect.options.length; i++) {
       const o = locationSelect.options[i];
       if (!o.dataset.loc) continue;
       try {
         const L = JSON.parse(o.dataset.loc);
-        if (L.id === String(chosenLocation.id) ||
-            (chosenLocation.lat && Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng))) {
+        if (chosenId && String(L.id) === chosenId) {
           locationSelect.selectedIndex = i;
           showLocationMeta(L);
           break;
         }
-      } catch(e) { /* ignore */ }
+        if (chosenLocation.lat !== undefined && chosenLocation.lng !== undefined &&
+            Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng)) {
+          locationSelect.selectedIndex = i;
+          showLocationMeta(L);
+          break;
+        }
+      } catch (e) { /* ignore parse errors */ }
     }
   }
 }
 
-// save chosen location to server
+// single save function (POST chosen location to server)
 async function saveChosenLocation(locObj) {
   if (!locObj) return;
   try {
@@ -197,7 +208,7 @@ async function saveChosenLocation(locObj) {
   }
 }
 
-// wire selection change: when user selects, show meta and save
+// when user changes selection, show meta & save
 if (locationSelect) {
   locationSelect.addEventListener('change', (e) => {
     const opt = e.target.selectedOptions[0];
@@ -213,46 +224,9 @@ if (locationSelect) {
       showLocationMeta(null);
       return;
     }
-
-    // display in UI
     showLocationMeta(loc);
-
-    // save (fire-and-forget)
+    // fire-and-forget
     saveChosenLocation(loc);
-  });
-}
-
-
-// save chosen location to server
-async function saveChosenLocation(locObj) {
-  try {
-    const res = await fetch(API_BASE + '/api/location/choice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ choice: locObj })
-    });
-    const json = await res.json();
-    if (json && json.success) {
-      console.log('chosenLocation saved', json.chosenLocation);
-    } else {
-      console.warn('Failed to save chosenLocation', json);
-    }
-  } catch (err) {
-    console.error('saveChosenLocation error', err);
-  }
-}
-
-// wire selection change
-if (locationSelect) {
-  locationSelect.addEventListener('change', (e) => {
-    const opt = e.target.selectedOptions[0];
-    if (!opt || !opt.dataset.loc || opt.value === '') {
-      showLocationMeta(null);
-      return;
-    }
-    const loc = JSON.parse(opt.dataset.loc);
-    showLocationMeta(loc);
-    saveChosenLocation(loc); // fire-and-forget
   });
 }
 
