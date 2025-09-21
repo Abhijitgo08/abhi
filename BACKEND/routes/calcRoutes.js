@@ -1,68 +1,91 @@
+// routes/calcRoutes.js
 const express = require("express");
 const router = express.Router();
-const fs = require("fs");
-const path = require("path");
+const axios = require("axios");
 
-// Load rainfall dataset
-const rainfallDataPath = path.join(__dirname, "../data/rainfall_data.json");
-const rainfallData = JSON.parse(fs.readFileSync(rainfallDataPath, "utf-8"));
+// Fetch average annual rainfall using Open-Meteo (2000–2020)
+async function getAverageRainfall(lat, lng) {
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=2000-01-01&end_date=2020-12-31&daily=precipitation_sum&timezone=UTC`;
 
-// Utility: find rainfall by district
-function getRainfallByDistrict(districtName) {
-  return rainfallData.find(
-    (entry) => entry.district.toLowerCase() === districtName.toLowerCase()
-  );
+  const resp = await axios.get(url, { timeout: 20_000 });
+  const dailyValues = resp.data?.daily?.precipitation_sum;
+  if (!dailyValues || !Array.isArray(dailyValues) || dailyValues.length === 0) {
+    return null;
+  }
+
+  const totalMm = dailyValues.reduce((a, b) => a + (Number(b) || 0), 0);
+  const years = 21; // 2000–2020 inclusive
+  return Math.round(totalMm / years); // mm/year
 }
 
 // POST /api/calc
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const { district, roofArea, roofType, dwellers } = req.body;
+    let { lat, lng, roofArea, roofType, dwellers } = req.body;
 
-    if (!district || !roofArea || !roofType || !dwellers) {
-      return res.status(400).json({ success: false, message: "Missing input fields" });
+    // convert to numbers
+    lat = Number(lat);
+    lng = Number(lng);
+    roofArea = Number(roofArea);
+    dwellers = Number(dwellers);
+
+    // validation
+    if (
+      isNaN(lat) ||
+      isNaN(lng) ||
+      isNaN(roofArea) ||
+      !roofType ||
+      isNaN(dwellers)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers",
+      });
     }
 
-    const rainfallEntry = getRainfallByDistrict(district);
-    if (!rainfallEntry) {
-      return res.status(404).json({ success: false, message: "District not found in dataset" });
+    // get rainfall
+    const rainfall_mm = await getAverageRainfall(lat, lng);
+    if (!rainfall_mm) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Rainfall data not available" });
     }
 
-    const rainfall_mm = rainfallEntry.rainfall_mm;
-
-    // Runoff coefficients (rough values)
+    // runoff coefficients
     const runoffCoeff = {
-      Concrete: 0.6,
-      Metal: 0.9,
+      concrete: 0.6,
+      metal: 0.9,
     };
+    const coeff = runoffCoeff[String(roofType).toLowerCase()] ?? 0.75;
 
-    const coeff = runoffCoeff[roofType.toLowerCase()] || 0.75;
-
-    // Core calculation
+    // calculation
     const litersPerYear = roofArea * (rainfall_mm / 1000) * 1000 * coeff;
-
-    // Estimate cost (very rough model: ₹1200 per m² roof area)
-    const estimatedCost = roofArea * 200;
-
-    // Family need: 100 liters/day per person
+    const estimatedCost = Math.round(roofArea * 200);
     const annualNeed = dwellers * 85 * 365;
-
-    const sufficiencyMonths = Math.round(litersPerYear / (dwellers * 100 * 30));
+    const sufficiencyMonths = Math.round(
+      litersPerYear / (dwellers * 100 * 30)
+    );
 
     res.json({
       success: true,
-      district,
+      lat,
+      lng,
       rainfall_mm,
       feasibility: litersPerYear > 10000 ? "YES" : "NO",
       litersPerYear: Math.round(litersPerYear),
       estimatedCost,
       sufficiencyMonths,
-      suggestion: litersPerYear > annualNeed 
-        ? "Build Storage Tank + Recharge Pit"
-        : "Consider Recharge Pit with supplemental sources"
+      suggestion:
+        litersPerYear > annualNeed
+          ? "Build Storage Tank + Recharge Pit"
+          : "Consider Recharge Pit with supplemental sources",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("calc route error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: error.message || "Internal error" });
   }
 });
 
