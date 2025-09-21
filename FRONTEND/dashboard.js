@@ -47,7 +47,7 @@ const esriLabels = L.tileLayer(
   {
     attribution: "Labels © Esri",
     maxNativeZoom: 17,
-    maxZoom: 18
+    maxZoom: 20
   }
 );
 
@@ -61,19 +61,19 @@ osm.addTo(map);
 map.on('zoomend', () => {
   const z = map.getZoom();
 
-  if (z >= 14 && z <= 18) {
-    if (!map.hasLayer(esriSat)) {
-      if (map.hasLayer(osm)) map.removeLayer(osm);
-      esriSat.addTo(map);
-      esriLabels.addTo(map);
-    }
-  } else {
-    if (!map.hasLayer(osm)) {
-      if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
-      if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
-      osm.addTo(map);
-    }
+  if (z >= 14 && z <= 20) {
+  if (!map.hasLayer(esriSat)) {
+    if (map.hasLayer(osm)) map.removeLayer(osm);
+    esriSat.addTo(map);
+    esriLabels.addTo(map);
   }
+} else {
+  if (!map.hasLayer(osm)) {
+    if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
+    if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
+    osm.addTo(map);
+  }
+}
 });
 
 // ----------------- Draw Control (single, correct setup) -----------------
