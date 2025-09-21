@@ -47,7 +47,7 @@ const esriLabels = L.tileLayer(
   {
     attribution: "Labels © Esri",
     maxNativeZoom: 17,
-    maxZoom: 19
+    maxZoom: 18
   }
 );
 
@@ -61,7 +61,7 @@ osm.addTo(map);
 map.on('zoomend', () => {
   const z = map.getZoom();
 
-  if (z >= 14 && z <= 19) {
+  if (z >= 14 && z <= 18) {
     if (!map.hasLayer(esriSat)) {
       if (map.hasLayer(osm)) map.removeLayer(osm);
       esriSat.addTo(map);
