@@ -247,7 +247,7 @@
         }
 
         // Show overlay before asking geolocation permission
-        showBlockingOverlay('Requesting location permission — please allow access when prompted');
+        showBlockingOverlay('Please allow access when prompted & Wait until we fetch your location');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
