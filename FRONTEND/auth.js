@@ -191,13 +191,16 @@
     overlay.style.zIndex = '99999';
     overlay.style.pointerEvents = 'auto';
     overlay.style.backdropFilter = 'blur(2px)';
-    overlay.innerHTML = `
-      <div style="max-width:90%;width:360px;background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);text-align:center;font-family:Inter, system-ui, -apple-system;">
-        <div style="font-size:18px;font-weight:600;color:#094d22;margin-bottom:8px">Please wait</div>
-        <div style="font-size:14px;color:#374151;margin-bottom:12px">Fetching your location — this may take a moment</div>
-        <div aria-hidden="true" style="font-size:22px;line-height:1">⏳</div>
+      overlay.innerHTML = `
+    <div style="max-width:90%;width:420px;background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);text-align:center;font-family:Inter, system-ui, -apple-system;">
+      <div style="font-size:18px;font-weight:700;color:#094d22;margin-bottom:8px">Location Permission Required</div>
+      <div style="font-size:14px;color:#374151;margin-bottom:12px;line-height:1.35">
+        Please allow location access when prompted. We will securely fetch your location to personalize your experience. This may take a few seconds.
       </div>
-    `;
+      <div aria-hidden="true" style="font-size:22px;line-height:1">⏳</div>
+    </div>
+  `;
+
     document.body.appendChild(overlay);
   }
 
@@ -247,7 +250,8 @@
         }
 
         // Show overlay before asking geolocation permission
-        showBlockingOverlay('Please allow access when prompted & Wait until we fetch your location');
+        // before asking permission (signup & login)
+        showBlockingOverlay('Please allow location access when prompted. We will securely fetch your location — this may take a few seconds.');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
@@ -288,7 +292,8 @@
         }
 
         // Show overlay before asking geolocation permission
-        showBlockingOverlay('Requesting location permission — please allow access when prompted');
+        // before asking permission (signup & login)
+        showBlockingOverlay('Please allow location access when prompted. We will securely fetch your location — this may take a few seconds.');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
