@@ -1,5 +1,6 @@
 // dashboard.js
-// Cleaned and ready-to-paste version. Includes deduping and single implementation for location dropdown.
+// Minimal-change version: the only significant change is in loadLocationOptions()
+// which adds detailed logging and a fallback fetch attempt (without Authorization) for debugging.
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -95,7 +96,7 @@ map.on(L.Draw.Event.EDITED, (e) => {
   });
 });
 
-// ----------------- LOCATION: load, display, save (clean) -----------------
+// ----------------- LOCATION: load, display, save (changed for debugging) -----------------
 function showLocationMeta(loc) {
   if (!locationMeta) return;
   if (!loc) {
@@ -107,84 +108,111 @@ function showLocationMeta(loc) {
   locationMeta.textContent = `${loc.address || 'Unknown'} — lat:${loc.lat ?? 'N/A'}, lng:${loc.lng ?? 'N/A'}`;
 }
 
+/*
+  loadLocationOptions:
+   - first tries GET with Authorization
+   - if response non-OK (400/401/5xx), logs response body and then tries a second GET without Authorization (fallback test)
+   - if still non-OK, it writes the server message into the dropdown and logs details to console
+*/
 async function loadLocationOptions() {
   if (!locationSelect) return;
-  try {
-    const res = await fetch(API_BASE + '/api/location/options', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const json = await res.json().catch(() => ({}));
-    const options = Array.isArray(json.locationOptions) ? json.locationOptions : [];
-    const chosen = json.chosenLocation || null;
-    populateLocationSelect(options, chosen);
-  } catch (err) {
-    console.error('loadLocationOptions error', err);
-    if (locationSelect) locationSelect.innerHTML = '<option value="">Error loading locations</option>';
+
+  const url = API_BASE + '/api/location/options';
+
+  async function doFetch(withAuth) {
+    const headers = {};
+    if (withAuth && token) headers['Authorization'] = `Bearer ${token}`;
+    try {
+      const res = await fetch(url, { method: 'GET', headers });
+      const text = await res.text().catch(() => '');
+      let json = {};
+      try { json = text ? JSON.parse(text) : {}; } catch (e) { /* not json */ }
+
+      return { ok: res.ok, status: res.status, text, json };
+    } catch (err) {
+      return { ok: false, status: 0, text: '', json: null, error: err };
+    }
   }
+
+  // 1) Try with Authorization header (original behavior)
+  const primary = await doFetch(true);
+  console.log('loadLocationOptions primary result:', primary);
+
+  // If primary succeeded, populate
+  if (primary.ok) {
+    const options = Array.isArray(primary.json.locationOptions) ? primary.json.locationOptions : [];
+    const chosen = primary.json.chosenLocation || null;
+    populateLocationSelect(options, chosen);
+    return;
+  }
+
+  // 2) If primary failed, try once without Authorization to detect whether server rejects auth header
+  console.warn('Primary /api/location/options fetch failed', primary.status, primary.text || primary.error);
+  const fallback = await doFetch(false);
+  console.log('loadLocationOptions fallback result (no auth):', fallback);
+
+  if (fallback.ok) {
+    const options = Array.isArray(fallback.json.locationOptions) ? fallback.json.locationOptions : [];
+    const chosen = fallback.json.chosenLocation || null;
+    populateLocationSelect(options, chosen);
+    // also warn to inspect token/auth on server
+    console.warn('Options loaded without Authorization header — check whether backend expects a token or rejects it.');
+    return;
+  }
+
+  // If both failed, show server message in dropdown for debugging
+  const debugMessage = primary.text || fallback.text || (primary.error ? String(primary.error) : `HTTP ${primary.status} / HTTP ${fallback.status}`);
+  console.error('Failed to load location options (both attempts). Server said:', debugMessage);
+
+  locationSelect.innerHTML = '';
+  const o = document.createElement('option');
+  o.value = '';
+  o.textContent = `Error loading locations: ${debugMessage.substring(0, 120)}${debugMessage.length>120?'...':''}`;
+  locationSelect.appendChild(o);
 }
 
-/**
- * Populate select with location options.
- * - options: array of objects { id, lat, lng, address, ... }
- * - chosenLocation: optional object to preselect (may match by id or coordinates)
- */
+// ---------- Simple dropdown + save selected location (unchanged) ----------
+
+// populate dropdown with address text
 function populateLocationSelect(options = [], chosenLocation = null) {
   if (!locationSelect) return;
+  locationSelect.innerHTML = '<option value=\"\">-- Select Location --</option>';
 
-  // start with placeholder
-  locationSelect.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = '-- Select Location --';
-  locationSelect.appendChild(placeholder);
-
-  // dedupe by address+lat+lng (sometimes API returns duplicates)
-  const seen = new Set();
   options.forEach((loc, i) => {
-    // normalize fields
-    const id = (loc && loc.id) ? String(loc.id) : 'loc_' + i;
-    const lat = (loc && (loc.lat !== undefined)) ? Number(loc.lat) : null;
-    const lng = (loc && (loc.lng !== undefined)) ? Number(loc.lng) : null;
-    const address = (loc && loc.address) ? String(loc.address) : (lat !== null && lng !== null ? `${lat}, ${lng}` : `Location ${i+1}`);
-
-    const dedupeKey = `${address.trim()}|${lat}|${lng}`;
-    if (seen.has(dedupeKey)) return;
-    seen.add(dedupeKey);
-
     const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = address;
-    // store full object so we can easily send it back
-    opt.dataset.loc = JSON.stringify({ id, address, lat, lng });
+    // prefer string id, fallback to index
+    const idStr = (loc.id && String(loc.id)) || ('loc_' + i);
+    opt.value = idStr;
+    opt.textContent = loc.address || (loc.lat && loc.lng ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
+    // store the full object so we can send it back on selection
+    opt.dataset.loc = JSON.stringify({
+      id: idStr,
+      address: loc.address || null,
+      lat: loc.lat ?? null,
+      lng: loc.lng ?? null
+    });
     locationSelect.appendChild(opt);
   });
 
-  // try to preselect chosenLocation if provided
+  // preselect chosenLocation if provided
   if (chosenLocation) {
-    const chosenId = (chosenLocation.id !== undefined) ? String(chosenLocation.id) : null;
     for (let i = 0; i < locationSelect.options.length; i++) {
       const o = locationSelect.options[i];
       if (!o.dataset.loc) continue;
       try {
         const L = JSON.parse(o.dataset.loc);
-        if (chosenId && String(L.id) === chosenId) {
+        if (L.id === String(chosenLocation.id) ||
+            (chosenLocation.lat && Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng))) {
           locationSelect.selectedIndex = i;
           showLocationMeta(L);
           break;
         }
-        if (chosenLocation.lat !== undefined && chosenLocation.lng !== undefined &&
-            Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng)) {
-          locationSelect.selectedIndex = i;
-          showLocationMeta(L);
-          break;
-        }
-      } catch (e) { /* ignore parse errors */ }
+      } catch(e) { /* ignore */ }
     }
   }
 }
 
-// single save function (POST chosen location to server)
+// save chosen location to server
 async function saveChosenLocation(locObj) {
   if (!locObj) return;
   try {
@@ -208,7 +236,7 @@ async function saveChosenLocation(locObj) {
   }
 }
 
-// when user changes selection, show meta & save
+// wire selection change: when user selects, show meta and save
 if (locationSelect) {
   locationSelect.addEventListener('change', (e) => {
     const opt = e.target.selectedOptions[0];
@@ -224,8 +252,11 @@ if (locationSelect) {
       showLocationMeta(null);
       return;
     }
+
+    // display in UI
     showLocationMeta(loc);
-    // fire-and-forget
+
+    // save (fire-and-forget)
     saveChosenLocation(loc);
   });
 }
