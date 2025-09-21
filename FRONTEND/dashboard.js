@@ -22,11 +22,11 @@ userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- MAP SETUP -----------------
 const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap contributors",
-  maxZoom: 19,
-  crossOrigin: true
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  maxZoom: 19
 }).addTo(map);
+
 
 // Draw Control
 const drawnItems = new L.FeatureGroup();
@@ -294,7 +294,7 @@ if (locationSelect) {
 
     // ✅ Center map on coordinates (no pin)
     if (loc.lat !== null && loc.lng !== null) {
-      map.setView([loc.lat, loc.lng], 10); // zoom=16, tweak as needed
+      map.setView([loc.lat, loc.lng], 11); // zoom=16, tweak as needed
     }
   });
 }
