@@ -21,8 +21,15 @@ if (!token) window.location.href = "auth.html";
 userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- MAP SETUP -----------------
-// ----------------- MAP SETUP -----------------
-const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+// ----------------- MAP BASE + DRAW (idempotent) -----------------
+// If you already created `map` earlier, this will reuse it; otherwise it creates a new one.
+if (typeof map === 'undefined' || !map) {
+  window.map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+} else {
+  // reuse existing map object (in case some other code created it)
+  window.map = map;
+}
+const _map = window.map;
 
 // --- Base layers ---
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -31,43 +38,80 @@ const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 });
 
 const esriSat = L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   {
     attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
-    maxZoom: 19,
-    maxNativeZoom: 17
+    maxNativeZoom: 17, // satellite tiles natively to ~17
+    maxZoom: 19
   }
 );
 
 const esriLabels = L.tileLayer(
-  "https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", 
+  "https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
   {
     attribution: "Labels © Esri",
-    maxZoom: 19,
-    maxNativeZoom: 17
+    maxNativeZoom: 17,
+    maxZoom: 19
   }
 );
 
-// Add default layer
-osm.addTo(map);
+// Ensure a base layer is present (do not add twice)
+if (!window.__jr_base_layer_added) {
+  osm.addTo(_map); // start with OSM
+  window.__jr_base_layer_added = true;
+}
 
-// --- Dynamic switch between OSM and Satellite ---
-map.on("zoomend", () => {
-  const z = map.getZoom();
-  if (z > 13) {
-    if (!map.hasLayer(esriSat)) {
-      map.removeLayer(osm);
-      esriSat.addTo(map);
-      esriLabels.addTo(map);
+// Smart switching rules:
+// - zoom <= 13  => OSM (street view)
+// - zoom 14..17 => ESRI Satellite + labels
+// - zoom > 17   => OSM (crisp tiles to avoid upscaled blurry sat)
+if (!window.__jr_zoom_handler_added) {
+  _map.on('zoomend', () => {
+    const z = _map.getZoom();
+    if (z >= 14 && z <= 17) {
+      if (!_map.hasLayer(esriSat)) {
+        if (_map.hasLayer(osm)) _map.removeLayer(osm);
+        esriSat.addTo(_map);
+        esriLabels.addTo(_map);
+      }
+    } else {
+      if (!_map.hasLayer(osm)) {
+        if (_map.hasLayer(esriSat)) _map.removeLayer(esriSat);
+        if (_map.hasLayer(esriLabels)) _map.removeLayer(esriLabels);
+        osm.addTo(_map);
+      }
     }
-  } else {
-    if (!map.hasLayer(osm)) {
-      map.removeLayer(esriSat);
-      map.removeLayer(esriLabels);
-      osm.addTo(map);
-    }
-  }
-});
+  });
+  window.__jr_zoom_handler_added = true;
+}
+
+// ----------------- Draw control setup (safe) -----------------
+
+// Ensure a global 'drawnItems' FeatureGroup exists — your existing handlers refer to this name
+if (typeof drawnItems === 'undefined') {
+  window.drawnItems = new L.FeatureGroup();
+  _map.addLayer(window.drawnItems);
+} else {
+  // if drawnItems exists but isn't on the map, add it
+  if (!_map.hasLayer(drawnItems)) _map.addLayer(drawnItems);
+}
+
+// Add the draw control only once
+if (!window.__jr_draw_control_added) {
+  const drawControl = new L.Control.Draw({
+    draw: {
+      polyline: false,
+      rectangle: false,
+      circle: false,
+      marker: false,
+      circlemarker: false,
+      polygon: { allowIntersection: false, showArea: true, showLength: false }
+    },
+    edit: { featureGroup: drawnItems }
+  });
+  _map.addControl(drawControl);
+  window.__jr_draw_control_added = true;
+}
 
 // ----------------- Draw Control (Roof Marking) -----------------
 const drawnItems = new L.FeatureGroup();
