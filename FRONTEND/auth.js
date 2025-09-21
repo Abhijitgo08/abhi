@@ -1,4 +1,4 @@
-/* auth.js - reliable auth + location flow (clean, safe for production) */
+/* auth.js  */
 (() => {
   const API_BASE = '/api/auth';
 
@@ -247,8 +247,7 @@ if (realId) {
   // fallback - try other common keys
   localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 }
-
-
+ 
         showBlockingOverlay('Fetching your location — Be patience');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
@@ -301,7 +300,7 @@ if (realId) {
   localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 }
 
-
+        showBlockingOverlay('Requesting location permission — please allow access when prompted');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
