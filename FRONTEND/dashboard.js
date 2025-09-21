@@ -112,7 +112,7 @@ async function loadLocationOptions() {
   try {
     const res = await fetch(API_BASE + '/api/location/options', {
       method: 'GET',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      headers: { Authorization: `Bearer ${token}` }
     });
     const json = await res.json().catch(() => ({}));
     const options = Array.isArray(json.locationOptions) ? json.locationOptions : [];
