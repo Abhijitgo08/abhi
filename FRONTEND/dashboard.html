@@ -68,10 +68,92 @@
         <select id="roofTypeInput" 
           class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
                  focus:ring-2 focus:ring-green-500 outline-none">
-          <option value="Concrete">Concrete</option>
-          <option value="Metal">Metal</option>
+          <option value="concrete">Concrete</option>
+          <option value="metal">Metal</option>
+          <option value="other">Other</option>
         </select>
       </div>
+
+      <!-- Soil Type -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Soil Type</label>
+        <select id="soilType"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+          <option value="loamy">Loamy</option>
+          <option value="sandy">Sandy</option>
+          <option value="clayey">Clayey</option>
+        </select>
+      </div>
+
+      <!-- Floors -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Floors</label>
+        <input type="number" id="floors" min="0" value="0"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <!-- Avg floor height -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Avg floor height (m)</label>
+        <input type="number" id="avgFloorHeight" step="any" value="3"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <!-- Velocity -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Target velocity (m/s)</label>
+        <input type="number" id="velocity_m_s" step="any" value="1"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <!-- Wet months & Filter factors -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Wet months (for pit sizing)</label>
+        <input type="number" id="wetMonths" min="1" value="4"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Filter safety factor (0-1)</label>
+        <input type="number" step="any" id="safetyFactorFilter" value="0.8" min="0" max="1"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Pit cost per m³ (INR)</label>
+        <input type="number" step="any" id="pit_cost_per_m3" value="800"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <!-- Design intensity + peak fraction fallback -->
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Design intensity (mm/hr) — optional</label>
+        <input type="number" step="any" id="designIntensity_mm_per_hr" placeholder="e.g. 25"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Peak fraction (fallback)</label>
+        <input type="number" step="any" id="peak_fraction" value="0.02"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
+      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
+        <label class="block text-sm font-medium text-gray-700">Design duration hours (fallback)</label>
+        <input type="number" step="any" id="design_duration_hours" value="4"
+          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
+                 focus:ring-2 focus:ring-green-500 outline-none">
+      </div>
+
     </div>
   </section>
 
