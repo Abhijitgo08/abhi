@@ -337,7 +337,7 @@ if (locationSelect) {
 
     // Center map on coordinates (no pin)
     if (loc.lat !== null && loc.lng !== null) {
-      map.setView([loc.lat, loc.lng], 16); // adjust zoom as needed
+      map.setView([loc.lat, loc.lng], 12); // adjust zoom as needed
     }
   });
 }
