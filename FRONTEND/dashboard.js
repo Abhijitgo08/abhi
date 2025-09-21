@@ -1,6 +1,9 @@
 // dashboard.js
-// Minimal-change version: the only significant change is in loadLocationOptions()
-// which adds detailed logging and a fallback fetch attempt (without Authorization) for debugging.
+// Cleaned single-file ready-to-paste version (minimal changes):
+// - Ensures `map` is created before use
+// - Single drawnItems + drawControl
+// - Smart OSM <-> Satellite switching
+// - Keeps your existing loadLocationOptions(), analysis and PDF logic
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -21,17 +24,10 @@ if (!token) window.location.href = "auth.html";
 userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- MAP SETUP -----------------
-// ----------------- MAP BASE + DRAW (idempotent) -----------------
-// If you already created `map` earlier, this will reuse it; otherwise it creates a new one.
-if (typeof map === 'undefined' || !map) {
-  window.map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
-} else {
-  // reuse existing map object (in case some other code created it)
-  window.map = map;
-}
-const _map = window.map;
+// Create the Leaflet map (ensure this exists before we add layers / draw controls)
+const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
 
-// --- Base layers ---
+// --- Base layers + smart zoom fallback (Option A) ---
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
   maxZoom: 19
@@ -41,7 +37,7 @@ const esriSat = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   {
     attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
-    maxNativeZoom: 17, // satellite tiles natively to ~17
+    maxNativeZoom: 17, // imagery only to z17 in many places
     maxZoom: 19
   }
 );
@@ -55,65 +51,32 @@ const esriLabels = L.tileLayer(
   }
 );
 
-// Ensure a base layer is present (do not add twice)
-if (!window.__jr_base_layer_added) {
-  osm.addTo(_map); // start with OSM
-  window.__jr_base_layer_added = true;
-}
+// Start with OSM (good for area names at low zoom)
+osm.addTo(map);
 
 // Smart switching rules:
-// - zoom <= 13  => OSM (street view)
+// - zoom <= 13  => OSM
 // - zoom 14..17 => ESRI Satellite + labels
-// - zoom > 17   => OSM (crisp tiles to avoid upscaled blurry sat)
-if (!window.__jr_zoom_handler_added) {
-  _map.on('zoomend', () => {
-    const z = _map.getZoom();
-    if (z >= 14 && z <= 17) {
-      if (!_map.hasLayer(esriSat)) {
-        if (_map.hasLayer(osm)) _map.removeLayer(osm);
-        esriSat.addTo(_map);
-        esriLabels.addTo(_map);
-      }
-    } else {
-      if (!_map.hasLayer(osm)) {
-        if (_map.hasLayer(esriSat)) _map.removeLayer(esriSat);
-        if (_map.hasLayer(esriLabels)) _map.removeLayer(esriLabels);
-        osm.addTo(_map);
-      }
+// - zoom > 17   => OSM (crisp tiles, avoid upscaled satellite blur)
+map.on('zoomend', () => {
+  const z = map.getZoom();
+
+  if (z >= 14 && z <= 17) {
+    if (!map.hasLayer(esriSat)) {
+      if (map.hasLayer(osm)) map.removeLayer(osm);
+      esriSat.addTo(map);
+      esriLabels.addTo(map);
     }
-  });
-  window.__jr_zoom_handler_added = true;
-}
+  } else {
+    if (!map.hasLayer(osm)) {
+      if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
+      if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
+      osm.addTo(map);
+    }
+  }
+});
 
-// ----------------- Draw control setup (safe) -----------------
-
-// Ensure a global 'drawnItems' FeatureGroup exists — your existing handlers refer to this name
-if (typeof drawnItems === 'undefined') {
-  window.drawnItems = new L.FeatureGroup();
-  _map.addLayer(window.drawnItems);
-} else {
-  // if drawnItems exists but isn't on the map, add it
-  if (!_map.hasLayer(drawnItems)) _map.addLayer(drawnItems);
-}
-
-// Add the draw control only once
-if (!window.__jr_draw_control_added) {
-  const drawControl = new L.Control.Draw({
-    draw: {
-      polyline: false,
-      rectangle: false,
-      circle: false,
-      marker: false,
-      circlemarker: false,
-      polygon: { allowIntersection: false, showArea: true, showLength: false }
-    },
-    edit: { featureGroup: drawnItems }
-  });
-  _map.addControl(drawControl);
-  window.__jr_draw_control_added = true;
-}
-
-// ----------------- Draw Control (Roof Marking) -----------------
+// ----------------- Draw Control (single, correct setup) -----------------
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
@@ -181,7 +144,7 @@ map.on(L.Draw.Event.EDITED, (e) => {
   });
 });
 
-// ----------------- LOCATION: load, display, save (changed for debugging) -----------------
+// ----------------- LOCATION: load, display, save -----------------
 function showLocationMeta(loc) {
   if (!locationMeta) return;
   if (!loc) {
@@ -196,7 +159,6 @@ function showLocationMeta(loc) {
 /**
  * Populate select with location options.
  * Minimal, safe implementation — creates options and stores a JSON string on data-loc.
- * Keeps duplicate addresses if returned by server (if you want dedupe we can add it).
  */
 function populateLocationSelect(options = [], chosenLocation = null) {
   if (!locationSelect) return;
@@ -212,7 +174,7 @@ function populateLocationSelect(options = [], chosenLocation = null) {
     const opt = document.createElement('option');
     const idStr = (loc && loc.id) ? String(loc.id) : ('loc_' + i);
     opt.value = idStr;
-    opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.address || loc.lat}, ${loc.lng}` : `Location ${i+1}`);
+    opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
 
     // store minimal useful object so caller can POST it back
     opt.dataset.loc = JSON.stringify({
@@ -220,7 +182,6 @@ function populateLocationSelect(options = [], chosenLocation = null) {
       address: loc.address || null,
       lat: loc.lat ?? null,
       lng: loc.lng ?? null,
-      // keep any other raw data if present (optional)
       raw: loc.raw ?? null,
       distance_m: loc.distance_m ?? null
     });
@@ -258,7 +219,6 @@ function populateLocationSelect(options = [], chosenLocation = null) {
    - if response non-OK (400/401/5xx), logs response body and then tries a second GET without Authorization (fallback test)
    - if still non-OK, it writes the server message into the dropdown and logs details to console
 */
-// Replace the existing loadLocationOptions() with this function
 async function loadLocationOptions() {
   if (!locationSelect) return;
 
@@ -328,7 +288,6 @@ async function loadLocationOptions() {
   console.error('Failed to load location options (both attempts). Server said:', debugMessage);
 }
 
-
 // save chosen location to server
 async function saveChosenLocation(locObj) {
   if (!locObj) return;
@@ -353,7 +312,6 @@ async function saveChosenLocation(locObj) {
   }
 }
 
-// wire selection change: when user selects, show meta and save
 // wire selection change: when user selects, show meta, save, and move map
 if (locationSelect) {
   locationSelect.addEventListener('change', (e) => {
@@ -377,13 +335,12 @@ if (locationSelect) {
     // save (fire-and-forget)
     saveChosenLocation(loc);
 
-    // ✅ Center map on coordinates (no pin)
+    // Center map on coordinates (no pin)
     if (loc.lat !== null && loc.lng !== null) {
-      map.setView([loc.lat, loc.lng], 11); // zoom=16, tweak as needed
+      map.setView([loc.lat, loc.lng], 16); // adjust zoom as needed
     }
   });
 }
-
 
 // initialize dropdown
 loadLocationOptions();
