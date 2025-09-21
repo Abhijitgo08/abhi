@@ -7,134 +7,146 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    body { 
-      font-family: 'Inter', sans-serif; 
+    :root {
+      --nav-height: 72px; /* used to align body content below fixed navbar */
+    }
+    html,body {
+      height: 100%;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
       background: url('back.jpeg') no-repeat center center fixed;
       background-size: cover;
+      padding-top: var(--nav-height); /* prevent navbar overlap */
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
     }
-    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
-    .backdrop-blur-nav { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-    .hero-overlay { background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); border-radius: 1rem; padding: 3rem; }
+    h1,h2,h3 { font-family: 'Poppins', sans-serif; }
+    .backdrop-blur-nav { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    /* subtle card backdrop for hero to keep text readable */
+    .hero-overlay { background: rgba(255,255,255,0.82); backdrop-filter: blur(6px); border-radius: 1rem; padding: 2.25rem; }
+    /* accessibility focus visible for interactive elements */
+    .focus-ring:focus { outline: 3px solid rgba(16,185,129,0.3); outline-offset: 2px; border-radius: .5rem; }
   </style>
 </head>
 <body class="text-gray-900">
 
 <!-- Navbar -->
-<nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 py-4 backdrop-blur-nav bg-gradient-to-r from-green-700/70 to-blue-600/60 shadow-md">
-  <a href="#" class="flex items-center space-x-3">
-    <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full shadow-lg">
-    <span class="text-2xl font-bold text-white">JalRakshak 1.0</span>
+<nav class="fixed top-0 left-0 w-full z-50 h-[var(--nav-height)] flex items-center justify-between px-6 md:px-12 backdrop-blur-nav bg-gradient-to-r from-green-800/70 to-blue-700/60 shadow-lg">
+  <a href="#" class="flex items-center space-x-3" aria-label="JalRakshak home">
+    <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full shadow-md object-cover">
+    <span class="text-lg md:text-2xl font-bold text-white">JalRakshak</span>
   </a>
-  <div class="hidden md:flex space-x-6 items-center px-6 py-3 rounded-full bg-white/10 shadow-lg">
-    <a href="#" class="text-white hover:text-yellow-300 font-medium transition">Home</a>
+
+  <!-- Desktop links -->
+  <div class="hidden md:flex items-center space-x-6 bg-white/10 px-4 py-2 rounded-full shadow-sm">
+    <a href="#" class="text-white hover:text-yellow-300 font-medium transition" aria-current="page">Home</a>
     <a href="#features" class="text-white hover:text-yellow-300 font-medium transition">Features</a>
     <a href="#about" class="text-white hover:text-yellow-300 font-medium transition">About</a>
-    <a href="contact.html" class="text-white hover:text-yellow-300 font-medium transition">Contact</a>
-    <a href="schemes.html" class="bg-yellow-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">
+    <a href="#contact" class="text-white hover:text-yellow-300 font-medium transition" id="open-contact-desktop">Contact</a>
+    <a href="schemes.html" class="bg-yellow-500 text-white px-4 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">
       Govt Schemes
     </a>
-    <a href="auth.html" class="bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-md">
+    <a href="auth.html" class="bg-emerald-600 text-white px-4 py-2 rounded-full font-semibold hover:bg-emerald-700 transition shadow-md">
       Get Started
     </a>
   </div>
-  <!-- Mobile Button -->
+
+  <!-- Mobile button -->
   <div class="md:hidden">
-    <button id="mobile-menu-button" class="text-white focus:outline-none">
-      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <button id="mobile-menu-button" class="text-white focus-ring" aria-label="Open mobile menu" aria-expanded="false">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
       </svg>
     </button>
   </div>
 </nav>
 
-<!-- Mobile Menu -->
-<div id="mobile-menu" class="hidden md:hidden fixed top-16 right-0 w-full bg-gradient-to-b from-green-800/95 to-blue-700/95 text-center py-6 space-y-4 z-40">
-  <a href="#" class="block text-white hover:text-yellow-300">Home</a>
-  <a href="#features" class="block text-white hover:text-yellow-300">Features</a>
-  <a href="#about" class="block text-white hover:text-yellow-300">About</a>
-  <a href="#contact" class="block text-white hover:text-yellow-300">Contact</a>
-  <a href="schemes.html" class="block mx-auto w-3/4 bg-yellow-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">
-    Govt Schemes
-  </a>
-  <a href="auth.html" class="block mx-auto w-3/4 bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-md">
-    Get Started
-  </a>
+<!-- Mobile Menu (slides from top) -->
+<div id="mobile-menu" class="transform -translate-y-full transition-transform duration-300 fixed left-0 right-0 top-[var(--nav-height)] bg-gradient-to-b from-green-800/98 to-blue-800/98 text-center py-6 space-y-4 z-40 shadow-xl md:hidden" aria-hidden="true">
+  <a href="#" class="block text-white hover:text-yellow-300 text-lg">Home</a>
+  <a href="#features" class="block text-white hover:text-yellow-300 text-lg">Features</a>
+  <a href="#about" class="block text-white hover:text-yellow-300 text-lg">About</a>
+  <button id="open-contact-mobile" class="block mx-auto w-11/12 bg-white/10 text-white px-5 py-2 rounded-full font-semibold hover:bg-white/20 transition shadow-md">Contact</button>
+  <a href="schemes.html" class="block mx-auto w-11/12 bg-yellow-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">Govt Schemes</a>
+  <a href="auth.html" class="block mx-auto w-11/12 bg-emerald-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-emerald-700 transition shadow-md">Get Started</a>
 </div>
 
 <!-- Hero Section -->
-<section class="h-screen flex items-center justify-center relative">
-  <div class="text-center px-6 md:px-12 w-full max-w-4xl hero-overlay shadow-2xl -mt-16 rounded-3xl border border-emerald-200">
-    <h1 class="text-4xl md:text-6xl font-bold text-emerald-700 leading-tight drop-shadow-md">
-      Nurture the Drop,<br /> Grow a Greener Tomorrow 🌿
+<section class="min-h-[70vh] flex items-center justify-center py-12">
+  <div class="w-full max-w-4xl px-6 md:px-12 hero-overlay shadow-2xl rounded-3xl border border-emerald-200">
+    <h1 class="text-3xl md:text-5xl lg:text-6xl font-bold text-emerald-800 leading-tight">
+      Nurture the Drop,<br/>Grow a Greener Tomorrow 🌿
     </h1>
-    <p class="mt-6 text-lg md:text-xl text-gray-700 font-medium">
-      AI-powered platform to calculate rooftop capacity, estimate costs & predict rainfall for sustainable rainwater harvesting.
+    <p class="mt-4 text-base md:text-lg text-gray-700 font-medium text-justify max-w-3xl">
+      AI-powered platform that calculates rooftop capacity, estimates costs, and predicts rainfall to help you build sustainable
+      rainwater harvesting systems. Upload a photo, get instant estimates, and choose government schemes that fit your project.
     </p>
-    <div class="mt-8 flex justify-center space-x-4 flex-wrap gap-4">
-      <a href="auth.html" class="bg-emerald-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-emerald-700 transition shadow-lg">
+
+    <div class="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4">
+      <a href="auth.html" class="inline-flex items-center justify-center bg-emerald-600 text-white px-6 py-3 rounded-full font-semibold text-md hover:bg-emerald-700 transition shadow-lg">
         Start Now
       </a>
-      <a href="schemes.html" class="bg-amber-500 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-amber-600 transition">
+      <a href="schemes.html" class="inline-flex items-center justify-center bg-amber-500 text-white px-6 py-3 rounded-full font-semibold text-md hover:bg-amber-600 transition shadow-lg">
         Govt Schemes
       </a>
-      <a href="#about" class="bg-sky-600 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-sky-700 transition">
+      <a href="#about" class="inline-flex items-center justify-center bg-sky-600 text-white px-6 py-3 rounded-full font-semibold text-md hover:bg-sky-700 transition shadow-lg">
         Learn More
       </a>
     </div>
   </div>
 </section>
 
-
 <!-- Features -->
-<section id="features" class="py-20 bg-green-50/80">
+<section id="features" class="py-16 bg-green-50/80">
   <div class="container mx-auto px-6">
-    <h2 class="text-4xl font-bold text-center text-green-800">Key Features</h2>
-    <div class="mt-12 grid md:grid-cols-3 gap-10 text-center">
-      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
-        <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="Rooftop Analysis Icon" class="w-16 h-16 mx-auto" />
-        <h3 class="mt-4 text-2xl font-semibold text-green-700">AI Rooftop Analysis</h3>
-        <p class="text-gray-700 mt-2">Upload a photo and let AI calculate your rooftop area and slope for maximum collection.</p>
+    <h2 class="text-3xl md:text-4xl font-bold text-center text-green-800">Key Features</h2>
+    <div class="mt-10 grid md:grid-cols-3 gap-8 text-center">
+      <div class="p-6 bg-white/80 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="Rooftop Analysis Icon" class="w-14 h-14 mx-auto" />
+        <h3 class="mt-4 text-xl font-semibold text-green-700">AI Rooftop Analysis</h3>
+        <p class="text-gray-700 mt-2 text-justify">Upload a photo and let AI calculate rooftop area and slope to maximize water collection.</p>
       </div>
-      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
-        <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="Cost Estimation Icon" class="w-16 h-16 mx-auto" />
-        <h3 class="mt-4 text-2xl font-semibold text-green-700">Instant Cost Estimation</h3>
-        <p class="text-gray-700 mt-2">Get a transparent cost breakdown for tanks, pipes, and fittings customized for your home.</p>
+
+      <div class="p-6 bg-white/80 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="Cost Estimation Icon" class="w-14 h-14 mx-auto" />
+        <h3 class="mt-4 text-xl font-semibold text-green-700">Instant Cost Estimation</h3>
+        <p class="text-gray-700 mt-2 text-justify">Transparent breakdown for tanks, pipes, and fittings, customized for your home and location.</p>
       </div>
-      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
-        <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="Rain Prediction Icon" class="w-16 h-16 mx-auto" />
-        <h3 class="mt-4 text-2xl font-semibold text-green-700">Smart Water Forecast</h3>
-        <p class="text-gray-700 mt-2">Uses local rainfall data to predict your annual water savings and break-even point.</p>
+
+      <div class="p-6 bg-white/80 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="Rain Prediction Icon" class="w-14 h-14 mx-auto" />
+        <h3 class="mt-4 text-xl font-semibold text-green-700">Smart Water Forecast</h3>
+        <p class="text-gray-700 mt-2 text-justify">Uses local rainfall data to predict water savings and your system's break-even point.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- About -->
-<section id="about" class="py-20 bg-green-100/90">
+<section id="about" class="py-16 bg-green-100/90">
   <div class="container mx-auto px-6 text-center">
-    <h2 class="text-4xl font-bold text-green-800">About Our Mission</h2>
-    <p class="mt-6 max-w-3xl mx-auto text-gray-800 text-lg leading-relaxed bg-white/70 p-6 rounded-xl shadow-md">
-      JalRakshak is built on a mission to combat water scarcity and promote environmental sustainability. 
-      We believe that technology can empower communities to make a tangible impact — one drop at a time.
+    <h2 class="text-3xl md:text-4xl font-bold text-green-800">About Our Mission</h2>
+    <p class="mt-6 max-w-3xl mx-auto text-gray-800 text-lg leading-relaxed bg-white/80 p-6 rounded-xl shadow-md text-justify">
+      JalRakshak is committed to combating water scarcity and promoting sustainability. We empower communities with technology and
+      practical design to harvest rainwater efficiently — one rooftop at a time.
     </p>
   </div>
 </section>
 
-<!-- Contact Modal -->
+<!-- Contact Modal (hidden until triggered) -->
 <div id="contactModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-  <div class="bg-white/95 rounded-xl shadow-2xl p-8 w-full max-w-xl relative">
-    <button id="closeContact" class="absolute top-3 right-3 text-gray-600 hover:text-red-600 text-2xl">&times;</button>
-    <h2 class="text-3xl font-bold text-green-800 text-center">Get In Touch</h2>
-    <p class="mt-4 text-gray-700 text-center">Have questions or want to partner with us? Fill the form below.</p>
-    <form action="#" method="POST" class="mt-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <input type="text" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none">
-        <input type="email" placeholder="Your Email" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none">
+  <div class="bg-white/95 rounded-xl shadow-2xl p-6 w-full max-w-xl relative">
+    <button id="closeContact" class="absolute top-3 right-3 text-gray-600 hover:text-red-600 text-2xl" aria-label="Close contact form">&times;</button>
+    <h2 class="text-2xl font-bold text-green-800 text-center">Get In Touch</h2>
+    <p class="mt-3 text-gray-700 text-center">Questions or partnerships? Send a message below.</p>
+    <form action="#" method="POST" class="mt-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input type="text" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none" required>
+        <input type="email" placeholder="Your Email" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none" required>
       </div>
-      <textarea placeholder="Your Message" rows="5" class="w-full mt-6 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none"></textarea>
-      <button type="submit" class="w-full mt-6 bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition shadow-md">
-        Send Message
-      </button>
+      <textarea placeholder="Your Message" rows="5" class="w-full mt-4 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none" required></textarea>
+      <button type="submit" class="w-full mt-4 bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition shadow-md">Send Message</button>
     </form>
   </div>
 </div>
@@ -142,17 +154,22 @@
 <!-- Footer -->
 <footer class="bg-gray-900 text-gray-300 pt-12">
   <div class="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 md:grid-cols-3 gap-10">
-
-    <!-- Brand -->
     <div>
       <h2 class="text-2xl font-bold text-white">JalRakshak</h2>
-      <p class="mt-3 text-gray-400 text-sm leading-relaxed">
-        Empowering communities to conserve water and promote sustainability
-        with AI-driven rainwater harvesting solutions.
-      </p>
+      <p class="mt-3 text-gray-400 text-sm leading-relaxed">Empowering communities to conserve water and promote sustainability with AI-driven rainwater harvesting.</p>
     </div>
 
-    <!-- Quick Links -->
+     <div>
+      <h3 class="text-lg font-semibold text-white mb-3">Features</h3>
+      <p class="mt-3 text-gray-400 text-sm">Quick feasibility check</p>
+      <p class="mt-3 text-gray-400 text-sm">Rapid rooftop area capture via map drawing</p>
+      <p class="mt-3 text-gray-400 text-sm">Roof type based runoff</p>
+      <p class="mt-3 text-gray-400 text-sm">Soil & rainfall-aware pit sizing</p>
+      <p class="mt-3 text-gray-400 text-sm">Vendor-aligned cost estimates</p>
+      <p class="mt-3 text-gray-400 text-sm">And many more making RTRWH assement easy......</p>
+      <div class="flex space-x-4 mt-4">
+    <div>
+
     <div>
       <h3 class="text-lg font-semibold text-white mb-3">Quick Links</h3>
       <ul class="space-y-2 text-gray-400">
@@ -160,41 +177,93 @@
         <li><a href="#features" class="hover:text-green-400 transition">Features</a></li>
         <li><a href="#about" class="hover:text-green-400 transition">About</a></li>
         <li><a href="schemes.html" class="hover:text-green-400 transition">Govt Schemes</a></li>
-        <li><a href="contact.html" class="hover:text-green-400 transition">Contact</a></li>
+        <li><a href="#contact" class="hover:text-green-400 transition" id="footer-contact-link">Contact</a></li>
       </ul>
     </div>
-
-    <!-- Social Media -->
-    <div>
-      <h3 class="text-lg font-semibold text-white mb-3">Connect with Us </h3>
-      <p class="mt-3 text-gray-400 text-sm leading-relaxed"> AbhijitG825@gmail.com</p>
-      <div class="flex space-x-4">
+    
+      <h3 class="text-lg font-semibold text-white mb-3">Connect with Us</h3>
+      <p class="mt-3 text-gray-400 text-sm">teamjalrashak1.0@gmail.com</p>
+      <p class="mt-3 text-gray-400 text-sm">abhijitgorde825@gmail.com</p>
+      <div class="flex space-x-4 mt-4">
+        <!-- replace hrefs with your real social links -->
         <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="LinkedIn">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M19 0h-14c-2.761..."></path>
-          </svg>
+          <!-- simple icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761..."/></svg>
         </a>
         <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="Twitter">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M24 4.557c-0.883..."></path>
-          </svg>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-0.883..."/></svg>
         </a>
         <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="GitHub">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 .297c-6.63 0..."></path>
-          </svg>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0..."/></svg>
         </a>
       </div>
     </div>
   </div>
 
-  <!-- Bottom Bar -->
   <div class="mt-10 border-t border-gray-700 py-6 text-center text-gray-400 text-sm">
     <p>&copy; 2025 JalRakshak. All rights reserved.</p>
   </div>
 </footer>
 
+<!-- Inline scripts: mobile menu + contact modal -->
+<script>
+  (function () {
+    const mobileBtn = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
 
-<script src="index.js"></script>
+    // toggle mobile menu
+    mobileBtn.addEventListener('click', () => {
+      const expanded = mobileBtn.getAttribute('aria-expanded') === 'true';
+      mobileBtn.setAttribute('aria-expanded', String(!expanded));
+      if (mobileMenu.classList.contains('-translate-y-full')) {
+        mobileMenu.classList.remove('-translate-y-full');
+        mobileMenu.setAttribute('aria-hidden', 'false');
+      } else {
+        mobileMenu.classList.add('-translate-y-full');
+        mobileMenu.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // Contact modal controls (works for desktop footer link and mobile)
+    const contactModal = document.getElementById('contactModal');
+    const openContactMobile = document.getElementById('open-contact-mobile');
+    const openContactDesktop = document.getElementById('open-contact-desktop');
+    const closeContact = document.getElementById('closeContact');
+    const footerContact = document.getElementById('footer-contact-link');
+
+    const openModal = () => {
+      contactModal.classList.remove('hidden');
+      // close mobile menu when opening modal
+      if (!mobileMenu.classList.contains('-translate-y-full')) {
+        mobileMenu.classList.add('-translate-y-full');
+        mobileMenu.setAttribute('aria-hidden','true');
+        mobileBtn.setAttribute('aria-expanded','false');
+      }
+    };
+    const closeModal = () => contactModal.classList.add('hidden');
+
+    if (openContactMobile) openContactMobile.addEventListener('click', openModal);
+    if (openContactDesktop) openContactDesktop.addEventListener('click', openModal);
+    if (footerContact) footerContact.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
+
+    closeContact.addEventListener('click', closeModal);
+    contactModal.addEventListener('click', (e) => {
+      if (e.target === contactModal) closeModal();
+    });
+
+    // keyboard escape to close modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!contactModal.classList.contains('hidden')) closeModal();
+        if (!mobileMenu.classList.contains('-translate-y-full')) {
+          mobileMenu.classList.add('-translate-y-full');
+          mobileMenu.setAttribute('aria-hidden','true');
+          mobileBtn.setAttribute('aria-expanded','false');
+        }
+      }
+    });
+  })();
+</script>
+
 </body>
 </html>
