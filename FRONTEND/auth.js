@@ -247,7 +247,7 @@ if (realId) {
   // fallback - try other common keys
   localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 }
- 
+        showBlockingOverlay('Requesting location permission — please allow access when prompted');
         showBlockingOverlay('Fetching your location — Be patience');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
@@ -300,7 +300,6 @@ if (realId) {
   localStorage.setItem('userId', data.user?.id || data.user?._id || '');
 }
 
-        showBlockingOverlay('Requesting location permission — please allow access when prompted');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
