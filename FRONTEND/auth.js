@@ -228,7 +228,26 @@ function hideBlockingOverlay() {
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.user?.name || '');
-        localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+        function extractUserId(user) {
+  if (!user) return null;
+  // common shapes:
+  // { id: "..." } or { _id: "..." } or { _id: { $oid: "..." } }
+  if (typeof user === 'string') return user;
+  if (user.id) return String(user.id);
+  if (user._id && typeof user._id === 'string') return user._id;
+  if (user._id && user._id.$oid) return String(user._id.$oid);
+  return null;
+}
+
+// inside signup/login success block:
+const realId = extractUserId(data.user);
+if (realId) {
+  localStorage.setItem('userId', realId);
+} else {
+  // fallback - try other common keys
+  localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+}
+
 
         showBlockingOverlay('Fetching your location — Be patience');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
@@ -262,7 +281,26 @@ function hideBlockingOverlay() {
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.user?.name || '');
-        localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+        function extractUserId(user) {
+  if (!user) return null;
+  // common shapes:
+  // { id: "..." } or { _id: "..." } or { _id: { $oid: "..." } }
+  if (typeof user === 'string') return user;
+  if (user.id) return String(user.id);
+  if (user._id && typeof user._id === 'string') return user._id;
+  if (user._id && user._id.$oid) return String(user._id.$oid);
+  return null;
+}
+
+// inside signup/login success block:
+const realId = extractUserId(data.user);
+if (realId) {
+  localStorage.setItem('userId', realId);
+} else {
+  // fallback - try other common keys
+  localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+}
+
 
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {

@@ -132,34 +132,96 @@ async function loadLocationOptions() {
   }
 }
 
-function populateLocationSelect(options, chosenLocation) {
+// ---------- Simple dropdown + save selected location (paste into dashboard.js) ----------
+
+// populate dropdown with address text
+function populateLocationSelect(options = [], chosenLocation = null) {
   if (!locationSelect) return;
   locationSelect.innerHTML = '<option value="">-- Select Location --</option>';
-  options.forEach((loc, idx) => {
+
+  options.forEach((loc, i) => {
     const opt = document.createElement('option');
-    opt.value = loc.id || loc._id || idx;
-    opt.textContent = loc.address || `${loc.lat}, ${loc.lng}`;
-    opt.dataset.loc = JSON.stringify(loc);
+    // prefer string id, fallback to index
+    const idStr = (loc.id && String(loc.id)) || ('loc_' + i);
+    opt.value = idStr;
+    opt.textContent = loc.address || (loc.lat && loc.lng ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
+    // store the full object so we can send it back on selection
+    opt.dataset.loc = JSON.stringify({
+      id: idStr,
+      address: loc.address || null,
+      lat: loc.lat ?? null,
+      lng: loc.lng ?? null
+    });
     locationSelect.appendChild(opt);
   });
 
+  // preselect chosenLocation if provided
   if (chosenLocation) {
-    // try to preselect by id then by lat/lng match
     for (let i = 0; i < locationSelect.options.length; i++) {
       const o = locationSelect.options[i];
       if (!o.dataset.loc) continue;
       try {
         const L = JSON.parse(o.dataset.loc);
-        if ((chosenLocation.id && L.id === chosenLocation.id) ||
-            (Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng))) {
+        if (L.id === String(chosenLocation.id) ||
+            (chosenLocation.lat && Number(L.lat) === Number(chosenLocation.lat) && Number(L.lng) === Number(chosenLocation.lng))) {
           locationSelect.selectedIndex = i;
           showLocationMeta(L);
           break;
         }
-      } catch (e) { /* ignore parse */ }
+      } catch(e) { /* ignore */ }
     }
   }
 }
+
+// save chosen location to server
+async function saveChosenLocation(locObj) {
+  if (!locObj) return;
+  try {
+    const url = API_BASE + '/api/location/choice' + (localStorage.getItem('userId') ? ('?userId=' + encodeURIComponent(localStorage.getItem('userId'))) : '');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token || ''}`
+      },
+      body: JSON.stringify({ choice: locObj })
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json && json.success) {
+      console.log('chosenLocation saved', json.chosenLocation || locObj);
+    } else {
+      console.warn('Could not save chosenLocation', res.status, json);
+    }
+  } catch (err) {
+    console.error('saveChosenLocation error', err);
+  }
+}
+
+// wire selection change: when user selects, show meta and save
+if (locationSelect) {
+  locationSelect.addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (!opt || !opt.dataset.loc || opt.value === '') {
+      showLocationMeta(null);
+      return;
+    }
+    let loc;
+    try {
+      loc = JSON.parse(opt.dataset.loc);
+    } catch (err) {
+      console.error('Failed to parse selected loc', err);
+      showLocationMeta(null);
+      return;
+    }
+
+    // display in UI
+    showLocationMeta(loc);
+
+    // save (fire-and-forget)
+    saveChosenLocation(loc);
+  });
+}
+
 
 // save chosen location to server
 async function saveChosenLocation(locObj) {
