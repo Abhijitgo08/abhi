@@ -1,10 +1,5 @@
-// dashboard.js
-// Cleaned single-file ready-to-paste version (minimal changes):
-// - Ensures `map` is created before use
-// - Single drawnItems + drawControl
-// - Smart OSM <-> Satellite switching
-// - Keeps your existing loadLocationOptions(), analysis and PDF logic
-// - READS `floors` and `soilType` from UI (not constants). Falls back gently if missing.
+// dashboard.js — complete file with floors & soil, improved suggestion & PDF
+// Requires: leaflet, leaflet-draw, turf, html2canvas, jsPDF (your HTML already includes them)
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -14,7 +9,6 @@ const outputCard = document.getElementById("outputCard");
 const userName = document.getElementById("userName");
 const roofAreaSpan = document.getElementById("roofArea");
 
-// New elements for location dropdown
 const locationSelect = document.getElementById("locationSelect");
 const locationMeta = document.getElementById("locationMeta");
 
@@ -24,44 +18,36 @@ const token = localStorage.getItem("token");
 if (!token) window.location.href = "auth.html";
 userName.textContent = localStorage.getItem("userName") || "User";
 
-// ----------------- MAP SETUP -----------------
-// Create the Leaflet map (ensure this exists before we add layers / draw controls)
-const map = L.map("map").setView([18.5204, 73.8567], 13); // Default Pune
+// ----------------- INTERNAL DEFAULTS -----------------
+const DEFAULTS = {
+  avgFloorHeight: 3.0,
+  velocity_m_s: 2.5,
+  wetMonths: 4,
+  safetyFactorFilter: 0.8,
+  pit_cost_per_m3: 800
+};
 
-// --- Base layers + smart zoom fallback (Option A) ---
+// ----------------- MAP SETUP -----------------
+const map = L.map("map").setView([18.5204, 73.8567], 13);
+
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
   maxZoom: 19
 });
-
-const esriSat = L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-  {
-    attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
-    maxNativeZoom: 17, // imagery only to z17 in many places
-    maxZoom: 20
-  }
-);
-
-const esriLabels = L.tileLayer(
-  "https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-  {
-    attribution: "Labels © Esri",
-    maxNativeZoom: 17,
-    maxZoom: 20
-  }
-);
-
-// Start with OSM (good for area names at low zoom)
+const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
+  maxNativeZoom: 17,
+  maxZoom: 20
+});
+const esriLabels = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+  attribution: "Labels © Esri",
+  maxNativeZoom: 17,
+  maxZoom: 20
+});
 osm.addTo(map);
 
-// Smart switching rules:
-// - zoom <= 13  => OSM
-// - zoom 14..17 => ESRI Satellite + labels
-// - zoom > 17   => OSM (crisp tiles, avoid upscaled satellite blur)
 map.on('zoomend', () => {
   const z = map.getZoom();
-
   if (z >= 14 && z <= 20) {
     if (!map.hasLayer(esriSat)) {
       if (map.hasLayer(osm)) map.removeLayer(osm);
@@ -77,24 +63,19 @@ map.on('zoomend', () => {
   }
 });
 
-// ----------------- Draw Control (single, correct setup) -----------------
+// Draw control (single polygon)
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
-
 const drawControl = new L.Control.Draw({
   draw: {
-    polyline: false,
-    rectangle: false,
-    circle: false,
-    marker: false,
-    circlemarker: false,
+    polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
     polygon: { allowIntersection: false, showArea: true, showLength: false }
   },
   edit: { featureGroup: drawnItems }
 });
 map.addControl(drawControl);
 
-// Utility: convert Leaflet latlngs to GeoJSON polygon coordinates for turf
+// turf helper
 function latlngsToTurfPolygon(latlngs) {
   const coords = latlngs.map((p) => [p.lng, p.lat]);
   if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) {
@@ -103,20 +84,19 @@ function latlngsToTurfPolygon(latlngs) {
   return turf.polygon([coords]);
 }
 
-// When user creates polygon
+// drawing events
 map.on(L.Draw.Event.CREATED, (e) => {
-  drawnItems.clearLayers(); // allow only one polygon at a time
+  drawnItems.clearLayers();
   const layer = e.layer;
   drawnItems.addLayer(layer);
-
   const latlngs = layer.getLatLngs()[0];
   try {
     const poly = latlngsToTurfPolygon(latlngs);
-    const area = turf.area(poly); // m²
+    const area = turf.area(poly);
     window.selectedRoofArea = Math.round(area);
     roofAreaSpan.textContent = window.selectedRoofArea;
   } catch (err) {
-    console.warn("Area calc failed, falling back to L.GeometryUtil if available", err);
+    console.warn("Area calc failed", err);
     if (L.GeometryUtil && typeof L.GeometryUtil.geodesicArea === "function") {
       const fallback = L.GeometryUtil.geodesicArea(latlngs);
       window.selectedRoofArea = Math.round(fallback);
@@ -127,8 +107,6 @@ map.on(L.Draw.Event.CREATED, (e) => {
     }
   }
 });
-
-// If polygon edited, update area too
 map.on(L.Draw.Event.EDITED, (e) => {
   const layers = e.layers;
   layers.eachLayer((layer) => {
@@ -145,7 +123,7 @@ map.on(L.Draw.Event.EDITED, (e) => {
   });
 });
 
-// ----------------- LOCATION: load, display, save -----------------
+// ----------------- LOCATION helpers -----------------
 function showLocationMeta(loc) {
   if (!locationMeta) return;
   if (!loc) {
@@ -157,14 +135,8 @@ function showLocationMeta(loc) {
   locationMeta.textContent = `${loc.address || 'Unknown'} — lat:${loc.lat ?? 'N/A'}, lng:${loc.lng ?? 'N/A'}`;
 }
 
-/**
- * Populate select with location options.
- * Minimal, safe implementation — creates options and stores a JSON string on data-loc.
- */
 function populateLocationSelect(options = [], chosenLocation = null) {
   if (!locationSelect) return;
-
-  // start fresh with placeholder
   locationSelect.innerHTML = '';
   const placeholder = document.createElement('option');
   placeholder.value = '';
@@ -176,8 +148,6 @@ function populateLocationSelect(options = [], chosenLocation = null) {
     const idStr = (loc && loc.id) ? String(loc.id) : ('loc_' + i);
     opt.value = idStr;
     opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
-
-    // store minimal useful object so caller can POST it back
     opt.dataset.loc = JSON.stringify({
       id: idStr,
       address: loc.address || null,
@@ -186,11 +156,9 @@ function populateLocationSelect(options = [], chosenLocation = null) {
       raw: loc.raw ?? null,
       distance_m: loc.distance_m ?? null
     });
-
     locationSelect.appendChild(opt);
   });
 
-  // preselect chosenLocation if provided (match by id or coords)
   if (chosenLocation) {
     const chosenId = (chosenLocation.id !== undefined) ? String(chosenLocation.id) : null;
     for (let i = 0; i < locationSelect.options.length; i++) {
@@ -209,21 +177,14 @@ function populateLocationSelect(options = [], chosenLocation = null) {
           showLocationMeta(L);
           break;
         }
-      } catch (e) { /* ignore parse errors */ }
+      } catch (e) {}
     }
   }
 }
 
-/*
-  loadLocationOptions:
-   - first tries GET with Authorization
-   - if response non-OK (400/401/5xx), logs response body and then tries a second GET without Authorization (fallback test)
-   - if still non-OK, it writes the server message into the dropdown and logs details to console
-*/
+// load location options (tries with auth then fallback)
 async function loadLocationOptions() {
   if (!locationSelect) return;
-
-  // include userId query param if present (server requires valid userId)
   const userId = localStorage.getItem('userId') || '';
   const qs = userId ? ('?userId=' + encodeURIComponent(userId)) : '';
   const url = API_BASE + '/api/location/options' + qs;
@@ -235,29 +196,21 @@ async function loadLocationOptions() {
       const res = await fetch(url, { method: 'GET', headers });
       const text = await res.text().catch(() => '');
       let json = {};
-      try { json = text ? JSON.parse(text) : {}; } catch (e) { /* not json */ }
+      try { json = text ? JSON.parse(text) : {}; } catch (e) {}
       return { ok: res.ok, status: res.status, text, json };
     } catch (err) {
       return { ok: false, status: 0, text: '', json: null, error: err };
     }
   }
 
-  // 1) Try with Authorization header (if token present)
   const primary = await doFetch(true);
-  console.log('loadLocationOptions primary result:', primary);
-
   if (primary.ok) {
     const options = Array.isArray(primary.json.locationOptions) ? primary.json.locationOptions : [];
     const chosen = primary.json.chosenLocation || null;
     populateLocationSelect(options, chosen);
     return;
   }
-
-  // 2) Fallback: try without Authorization (debug)
-  console.warn('Primary /api/location/options fetch failed', primary.status, primary.text || primary.error);
   const fallback = await doFetch(false);
-  console.log('loadLocationOptions fallback result (no auth):', fallback);
-
   if (fallback.ok) {
     const options = Array.isArray(fallback.json.locationOptions) ? fallback.json.locationOptions : [];
     const chosen = fallback.json.chosenLocation || null;
@@ -266,10 +219,7 @@ async function loadLocationOptions() {
     return;
   }
 
-  // 3) If both failed, show server message or helpful hint
   const debugMessage = primary.text || fallback.text || (primary.error ? String(primary.error) : `HTTP ${primary.status} / HTTP ${fallback.status}`);
-
-  // If there was no userId, give a clearer hint
   if (!userId) {
     locationSelect.innerHTML = '';
     const o = document.createElement('option');
@@ -279,8 +229,6 @@ async function loadLocationOptions() {
     console.error('loadLocationOptions failed: no userId in localStorage and server response:', debugMessage);
     return;
   }
-
-  // Otherwise show server response snippet
   locationSelect.innerHTML = '';
   const o = document.createElement('option');
   o.value = '';
@@ -289,17 +237,13 @@ async function loadLocationOptions() {
   console.error('Failed to load location options (both attempts). Server said:', debugMessage);
 }
 
-// save chosen location to server
 async function saveChosenLocation(locObj) {
   if (!locObj) return;
   try {
     const url = API_BASE + '/api/location/choice' + (localStorage.getItem('userId') ? ('?userId=' + encodeURIComponent(localStorage.getItem('userId'))) : '');
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token || ''}`
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || ''}` },
       body: JSON.stringify({ choice: locObj })
     });
     const json = await res.json().catch(() => null);
@@ -313,142 +257,104 @@ async function saveChosenLocation(locObj) {
   }
 }
 
-// wire selection change: when user selects, show meta, save, and move map
 if (locationSelect) {
   locationSelect.addEventListener('change', (e) => {
     const opt = e.target.selectedOptions[0];
-    if (!opt || !opt.dataset.loc || opt.value === '') {
-      showLocationMeta(null);
-      return;
-    }
+    if (!opt || !opt.dataset.loc || opt.value === '') { showLocationMeta(null); return; }
     let loc;
-    try {
-      loc = JSON.parse(opt.dataset.loc);
-    } catch (err) {
-      console.error('Failed to parse selected loc', err);
-      showLocationMeta(null);
-      return;
-    }
-
-    // display in UI
+    try { loc = JSON.parse(opt.dataset.loc); } catch (err) { console.error('Failed to parse selected loc', err); showLocationMeta(null); return; }
     showLocationMeta(loc);
-
-    // save (fire-and-forget)
     saveChosenLocation(loc);
-
-    // Center map on coordinates (no pin)
-    if (loc.lat !== null && loc.lng !== null) {
-      map.setView([loc.lat, loc.lng], 12); // adjust zoom as needed
-    }
+    if (loc.lat !== null && loc.lng !== null) { map.setView([loc.lat, loc.lng], 12); }
   });
 }
-
-// initialize dropdown
 loadLocationOptions();
 
 // ----------------- ANALYSIS (call backend) -----------------
-// ----------------- ANALYSIS (call backend) -----------------
 analyzeBtn.addEventListener("click", async () => {
-  // Ensure roof polygon exists / area is selected
   const roofArea = window.selectedRoofArea || 0;
   if (!roofArea || roofArea <= 0) {
     alert("Please draw your roof polygon on the map first!");
     return;
   }
 
-  // Show running UI
   analysisResult.classList.remove("hidden");
   analysisResult.innerHTML = `<p class="text-lg text-gray-500">🔄 Running analysis...</p>`;
 
-  // 1) Try to obtain lat/lng: prefer selected dropdown location
+  // get coords: prefer dropdown selection, else polygon centroid
   let lat = NaN, lng = NaN;
   if (locationSelect && locationSelect.selectedOptions.length > 0) {
     const opt = locationSelect.selectedOptions[0];
     if (opt && opt.dataset && opt.dataset.loc && opt.value !== '') {
       try {
         const loc = JSON.parse(opt.dataset.loc);
-        lat = Number(loc.lat);
-        lng = Number(loc.lng);
-      } catch (err) {
-        console.warn("Could not parse dataset.loc from selected option", err);
-      }
+        lat = Number(loc.lat); lng = Number(loc.lng);
+      } catch (err) { console.warn("Could not parse dataset.loc", err); }
     }
   }
-
-  // 2) If dropdown didn't provide coords, fallback to polygon centroid (if drawn)
-  if ((isNaN(lat) || isNaN(lng)) && typeof drawnItems !== "undefined" && drawnItems.getLayers().length > 0) {
+  if ((isNaN(lat) || isNaN(lng)) && drawnItems.getLayers().length > 0) {
     try {
       const layer = drawnItems.getLayers()[0];
       if (layer && typeof layer.getBounds === "function") {
         const c = layer.getBounds().getCenter();
-        lat = Number(c.lat);
-        lng = Number(c.lng);
+        lat = Number(c.lat); lng = Number(c.lng);
       } else if (layer && typeof layer.getLatLngs === "function") {
         const latlngs = layer.getLatLngs()[0] || [];
         if (latlngs && latlngs.length) {
-          // try turf centroid if available
           const coords = latlngs.map(p => [p.lng, p.lat]);
           if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) coords.push(coords[0]);
           if (window.turf) {
-            const poly = turf.polygon([coords]);
-            const c = turf.centroid(poly);
-            lat = c?.geometry?.coordinates?.[1];
-            lng = c?.geometry?.coordinates?.[0];
+            const poly = turf.polygon([coords]); const c = turf.centroid(poly);
+            lat = c?.geometry?.coordinates?.[1]; lng = c?.geometry?.coordinates?.[0];
           } else {
-            // simple average fallback
             const avg = coords.reduce((acc, cur) => [acc[0]+cur[0], acc[1]+cur[1]], [0,0]).map(v=>v/coords.length);
             lng = avg[0]; lat = avg[1];
           }
         }
       }
-    } catch (err) {
-      console.warn("Could not determine polygon center", err);
-    }
+    } catch (err) { console.warn("Could not determine polygon center", err); }
   }
 
-  // Get other inputs
-  const dwellers = parseInt(document.getElementById("dwellersInput").value) || NaN;
+  // required inputs
+  const dwellers = (() => {
+    const v = document.getElementById("dwellersInput")?.value ?? '';
+    return v.toString().trim() === '' ? NaN : Number(v);
+  })();
+
   const roofTypeEl = document.getElementById("roofTypeInput") || document.getElementById("roofType");
   const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : null;
 
-  // NEW: read floors from UI (if present). If missing, try parseInt on #floors; else NaN.
+  // floors from UI (must be integer >=0)
   let floors = NaN;
   const floorsEl = document.getElementById("floors");
   if (floorsEl) {
     const fRaw = (floorsEl.value ?? '').toString().trim();
-    floors = fRaw === '' ? NaN : parseInt(fRaw);
-    if (!isNaN(floors) && floors < 0) floors = NaN;
+    const parsed = fRaw === '' ? NaN : Number(fRaw);
+    if (!isNaN(parsed) && parsed >= 0) floors = Math.floor(parsed);
   }
 
-  // NEW: read soilType from UI if present
+  // soil from UI if present
   const soilEl = document.getElementById("soilType");
   const soilType = soilEl ? (soilEl.value || null) : null;
 
-  // Validate required fields (backend expects: lat, lng, roofArea, roofType, dwellers)
+  // validation (backend expects lat, lng, roofArea, roofType, dwellers, floors)
   if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers) || isNaN(floors)) {
     analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers, floors</p>`;
     console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers, floors });
     return;
   }
 
+  // build payload
+  const payload = { lat, lng, roofArea, roofType, dwellers, floors, avgFloorHeight: DEFAULTS.avgFloorHeight, velocity_m_s: DEFAULTS.velocity_m_s, wetMonths: DEFAULTS.wetMonths, safetyFactorFilter: DEFAULTS.safetyFactorFilter, pit_cost_per_m3: DEFAULTS.pit_cost_per_m3 };
+  if (soilType) payload.soilType = soilType;
+
   try {
-    const url = API_BASE + '/api/calc';
-
-    // Build payload: include floors and soilType if available
-    const payload = { lat, lng, roofArea, roofType, dwellers, floors };
-    if (soilType) payload.soilType = soilType;
-
-    const res = await fetch(url, {
+    const res = await fetch(API_BASE + '/api/calc', {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload)
     });
-
     const data = await res.json().catch(() => null);
-
     if (!res.ok || !data || !data.success) {
       const msg = (data && data.message) ? data.message : `Server error (${res.status})`;
       analysisResult.innerHTML = `<p class="text-red-600">❌ ${msg}</p>`;
@@ -456,51 +362,76 @@ analyzeBtn.addEventListener("click", async () => {
       return;
     }
 
-    // Normalize server fields (be tolerant of different naming):
+    // normalize server response
     const litersPerYear = data.runoff_liters_per_year ?? data.litersPerYear ?? data.runoff ?? 0;
     const estimatedCost = data.costs?.total_estimated_installation_cost ?? data.estimatedCost ?? data.cost ?? 0;
     const suffMonths = data.sufficiencyMonths ?? data.sufficiency_months ?? data.sufficiency ?? null;
-    const suggestion = data.suggestion ?? data.recommendation ?? null;
-    const feasibilityFlag = (typeof data.feasibility === 'boolean') ? (data.feasibility ? "YES" : "NO") : (data.feasibility ?? ((data.coverageRatio && data.coverageRatio >= 0.25) ? "YES" : "NO"));
+    const suggestionServer = data.suggestion ?? data.recommendation ?? null;
+    const coverageRatio = data.coverageRatio ?? null;
 
-    // Show result summary (keeps your existing UI)
+    // determine UI suggestion: storage tank + pit if harvest >= annual need, else pit + supplements
+    const ANNUAL_NEED_PER_PERSON_LPD = 85;
+    const annualNeed = Math.round((dwellers || 0) * ANNUAL_NEED_PER_PERSON_LPD * 365);
+    let suggestionUI;
+    if (Number(litersPerYear) >= Number(annualNeed) && annualNeed > 0) {
+      suggestionUI = "Build Storage Tank + Recharge Pit";
+    } else {
+      suggestionUI = "Consider Recharge Pit with supplemental sources";
+    }
+
+    // show summary (headline uses suggestionUI)
     analysisResult.innerHTML = `
       <p class="text-lg">Feasibility: 
-        <span class="font-bold ${feasibilityFlag === "YES" ? "text-green-600" : "text-red-600"}">
-          ${feasibilityFlag}
+        <span class="font-bold ${(coverageRatio !== null ? (coverageRatio >= 0.25) : (data.feasibility === true || data.feasibility === 'YES')) ? "text-green-600" : "text-red-600"}">
+          ${(coverageRatio !== null ? ((coverageRatio >= 0.25) ? "YES" : "NO") : (data.feasibility === true || data.feasibility === 'YES' ? "YES" : "NO"))}
         </span>
       </p>
       <p class="mt-2">Estimated Harvesting Capacity: 
-        <span class="font-bold">${(litersPerYear || 0).toLocaleString()} Liters/year</span>
+        <span class="font-bold">${Number(litersPerYear || 0).toLocaleString()} Liters/year</span>
       </p>
       <p class="mt-2">Estimated Cost: 
         <span class="font-bold text-yellow-700">₹${Number(estimatedCost || 0).toLocaleString()}</span>
       </p>
       <p class="mt-2">Water Sufficiency: 
-        <span class="font-bold">${suffMonths !== null ? suffMonths : (data.coverageRatio ? Math.round((data.coverageRatio || 0) * 12) : "N/A")} months</span>
+        <span class="font-bold">${suffMonths !== null ? suffMonths : (coverageRatio ? Math.round(coverageRatio * 12) : "N/A")} months</span>
       </p>
       <p class="mt-2">Suggestion: 
-        <span class="font-bold text-blue-600">${suggestion || (data.filters?.chosen?.name) || "Consider Recharge Pit with supplemental sources"}</span>
+        <span class="font-bold text-blue-600">${suggestionUI}</span>
       </p>
     `;
 
-    // design + impact (same as before)
+    // design card (summary + collapse details containing filter/pipe/pit)
     designCard.classList.remove("hidden");
-    designCard.innerHTML = `
-      <h3 class="text-xl font-semibold text-blue-600">Suggested Structure</h3>
-      <p class="mt-2 text-gray-700">${suggestion || (data.filters?.chosen?.name) || "See detailed recommendations below."}</p>
-      <p class="mt-1 text-gray-700">Estimated Cost: ₹${Number(estimatedCost || 0).toLocaleString()}</p>
-    `;
+    const filterName = data.filters?.chosen?.name || (Array.isArray(data.filters?.candidates) && data.filters.candidates[0]?.name) || "N/A";
+    const pipeName = data.pipe?.chosen_option?.name || data.pipe?.chosen_option?.id || "N/A";
+    const pitVol = data.pit?.pit_volume_m3 ?? "N/A";
+    const aquiferType = data.aquifer?.type ?? "N/A";
 
+    let designHtml = `
+      <h3 class="text-xl font-semibold text-blue-600">Suggested Structure</h3>
+      <p class="mt-2 text-gray-700">${suggestionUI}</p>
+      <p class="mt-1 text-gray-700">Estimated Cost: ₹${Number(estimatedCost || 0).toLocaleString()}</p>
+      <details class="mt-3 p-3 bg-white/30 rounded"><summary class="font-medium">Design details (click to expand)</summary>
+        <ul class="mt-2 text-sm text-gray-800 text-left">
+          <li><strong>Recommended filter:</strong> ${filterName}</li>
+          <li><strong>Recommended pipe:</strong> ${pipeName}</li>
+          <li><strong>Pit volume (m³):</strong> ${pitVol}</li>
+          <li><strong>Aquifer:</strong> ${aquiferType}</li>
+        </ul>
+      </details>
+    `;
+    designCard.innerHTML = designHtml;
+
+    // output card (summary + PDF + JSON)
     outputCard.classList.remove("hidden");
     outputCard.innerHTML = `
       <p class="text-lg font-medium">💧 You can save 
-        <span class="font-bold text-green-700">${(litersPerYear || 0).toLocaleString()} Liters/year</span>
+        <span class="font-bold text-green-700">${Number(litersPerYear || 0).toLocaleString()} Liters/year</span>
       </p>
       <p class="mt-2">📅 Covers 
-        <span class="font-bold">${suffMonths !== null ? suffMonths : (data.coverageRatio ? Math.round((data.coverageRatio || 0) * 12) : "N/A")} months</span> of family needs</p>
+        <span class="font-bold">${suffMonths !== null ? suffMonths : (coverageRatio ? Math.round(coverageRatio * 12) : "N/A")} months</span> of family needs</p>
       <p class="mt-2">🏙 Equivalent to water for 
-        <span class="font-bold">${Math.round((litersPerYear || 0) / 10000)} households</span></p>
+        <span class="font-bold">${Math.round(Number(litersPerYear || 0) / 10000)}</span> households</p>
       <div class="mt-4 flex flex-col md:flex-row gap-3 justify-center">
         <button id="downloadReportBtn" class=" no-pdf bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
           Download Technical Report (PDF)
@@ -509,26 +440,31 @@ analyzeBtn.addEventListener("click", async () => {
           📑 Govt Documentation Checklist
         </button>
       </div>
+      <div class="mt-4 text-left">
+        <details><summary class="text-sm font-medium">Show full analysis JSON</summary>
+          <pre class="text-xs bg-gray-100 p-2 rounded max-h-72 overflow-auto">${JSON.stringify(data, null, 2)}</pre>
+        </details>
+      </div>
     `;
 
-    // wire download button - pass a consistent reportData object expected by generatePDF
+    // wire PDF button (pass reportData with server)
     document.getElementById("downloadReportBtn").addEventListener("click", async () => {
       const reportData = {
         district: (locationSelect.selectedOptions[0] && locationSelect.selectedOptions[0].dataset.loc) ? JSON.parse(locationSelect.selectedOptions[0].dataset.loc).address : "",
         roofType,
         dwellers,
+        floors,
+        soilType,
         rainfall_mm: data.rainfall_mm ?? data.rainfall ?? null,
         litersPerYear,
         estimatedCost,
         sufficiencyMonths: suffMonths,
-        suggestion: suggestion,
-        // include raw server payload for full detail in PDF if needed
+        suggestion: suggestionUI,
         server: data
       };
       await generatePDF(reportData);
     });
 
-    // optional: show govt docs (simple modal or link)
     document.getElementById("govtDocsBtn").addEventListener("click", () => {
       alert("Govt documentation checklist will be shown (you can convert this to a modal/pdf).");
     });
@@ -539,11 +475,10 @@ analyzeBtn.addEventListener("click", async () => {
   }
 });
 
-
-// ----------------- PDF GENERATION -----------------
+// ----------------- PDF GENERATION (improved) -----------------
 async function generatePDF(reportData) {
   if (!window.jspdf) {
-    alert("PDF library (jsPDF) not loaded. Confirm jspdf script is included.");
+    alert("PDF generation requires jsPDF. Ensure jsPDF script is included.");
     console.error("jsPDF missing");
     return;
   }
@@ -557,113 +492,194 @@ async function generatePDF(reportData) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const margin = 40;
-  let cursorY = 48;
+  const margin = 36;
+  const usableW = pageW - margin * 2;
+  let y = 48;
+
+  const fmt = (v) => (v === null || v === undefined) ? "N/A" : (typeof v === "number" ? v.toLocaleString() : String(v));
+  const inr = (v) => (v === null || v === undefined) ? "N/A" : ("₹" + Math.round(Number(v) || 0).toLocaleString());
+  const safe = (o, path, d = null) => {
+    try {
+      const parts = path.split('.');
+      let cur = o;
+      for (const p of parts) {
+        if (cur == null) return d;
+        cur = cur[p];
+      }
+      return cur == null ? d : cur;
+    } catch (e) { return d; }
+  };
+
+  const server = reportData.server || {};
+  const user = localStorage.getItem("userName") || "User";
+  const district = reportData.district || safe(server, "inputs.address") || safe(server, "district") || "";
+  const roofArea = safe(server, "inputs.roofArea", safe(server, "roofArea", window.selectedRoofArea || "N/A"));
+  const roofType = reportData.roofType || safe(server, "inputs.roofType") || safe(server, "roofType");
+  const dwellers = reportData.dwellers ?? safe(server, "inputs.dwellers") ?? safe(server, "dwellers");
+  const floors = safe(server, "inputs.floors", reportData.floors ?? "N/A");
+  const soilType = safe(server, "inputs.soilType") || reportData.soilType || "N/A";
+
+  const rainfall_mm = reportData.rainfall_mm ?? safe(server, "rainfall_mm") ?? safe(server, "rainfall") ?? "N/A";
+  const runoff_lpy = safe(server, "runoff_liters_per_year", safe(server, "litersPerYear", safe(server, "runoff", 0)));
+  const infiltrated_lpy = safe(server, "infiltrated_liters_per_year", null);
+  const annualNeed_L = safe(server, "annualNeed", Math.round((dwellers || 0) * 85 * 365));
+  const coverageRatio = safe(server, "coverageRatio", (annualNeed_L && runoff_lpy) ? (runoff_lpy / annualNeed_L) : null);
+
+  const pipe_diam_mm = safe(server, "pipe.calculated_diameter_mm", safe(server, "pipe.calculated_diameter_mm", safe(server, "pipe_diameter_mm", "N/A")));
+  const chosenPipe = safe(server, "pipe.chosen_option", null);
+  const filterChosen = safe(server, "filters.chosen", null);
+  const filterCandidates = safe(server, "filters.candidates", []);
+  const pit_vol_m3 = safe(server, "pit.pit_volume_m3", safe(server, "pit_volume_m3", "N/A"));
+  const pit_cost = safe(server, "pit.pit_cost_estimate", safe(server, "pit_cost_estimate", null));
+
+  const cost_pipe = safe(server, "costs.chosen_pipe_cost", null);
+  const cost_filter = safe(server, "costs.chosen_filter_cost", null);
+  const cost_pit = pit_cost ?? safe(server, "costs.pit_cost", null);
+  const total_cost = safe(server, "costs.total_estimated_installation_cost", reportData.estimatedCost ?? null);
+
+  const aquifer = safe(server, "aquifer.type", "N/A");
+  const suggestion = reportData.suggestion || safe(server, "suggestion") || safe(server, "recommendation") || "N/A";
+  const feasibility = safe(server, "feasibility", (safe(server, "coverageRatio") && safe(server, "coverageRatio") >= 0.25) ? true : null);
 
   // Header
   doc.setFontSize(18);
-  doc.text("JalRakshak — Technical Report", margin, cursorY);
-  cursorY += 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("JalRakshak — Technical Report", margin, y);
+  y += 22;
   doc.setFontSize(11);
-
-  const user = localStorage.getItem("userName") || "User";
-  const metaLines = [
-    `Prepared for: ${user}`,
-    `District: ${reportData.district || "N/A"}`,
-    `Roof Area (m²): ${window.selectedRoofArea || "N/A"}`,
-    `Roof Type: ${reportData.roofType || "N/A"}`,
-    `Dwellers: ${reportData.dwellers || "N/A"}`,
-    `Annual Rainfall used: ${reportData.rainfall_mm || "N/A"} mm`,
-    `Potential harvest: ${reportData.litersPerYear ? reportData.litersPerYear.toLocaleString() + " litres/year" : "N/A"}`,
-    `Estimated cost: ${reportData.estimatedCost ? "₹" + reportData.estimatedCost.toLocaleString() : "N/A"}`,
-    `Water sufficiency: ${reportData.sufficiencyMonths || "N/A"} months`,
-    `Suggestion: ${reportData.suggestion || "N/A"}`
-  ];
-
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  for (const ln of metaLines) {
-    if (cursorY > pageH - 120) { doc.addPage(); cursorY = 48; }
-    doc.text(ln, margin, cursorY);
-    cursorY += 16;
+  doc.text(`Prepared for: ${user}`, margin, y); y += 14;
+  doc.text(`District: ${district || "N/A"}`, margin, y); y += 18;
+
+  // Summary columns
+  const col1x = margin;
+  const col2x = margin + usableW / 2 + 10;
+  const lineH = 14;
+  doc.setFont("helvetica", "bold"); doc.text("Quick summary", col1x, y); y += 16;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+
+  const left = [
+    ["Roof area (m²)", fmt(roofArea)],
+    ["Roof type", roofType || "N/A"],
+    ["Floors", fmt(floors)],
+    ["Soil", soilType || "N/A"],
+    ["Dwellers", fmt(dwellers)]
+  ];
+  const right = [
+    ["Annual rainfall (mm)", fmt(rainfall_mm)],
+    ["Potential harvest (L/yr)", fmt(runoff_lpy)],
+    ["Infiltrated (L/yr)", fmt(infiltrated_lpy)],
+    ["Annual need (L/yr)", fmt(annualNeed_L)],
+    ["Coverage ratio", coverageRatio != null ? (Number(coverageRatio) * 100).toFixed(1) + "%" : "N/A"]
+  ];
+  let rowY = y;
+  for (let i=0;i<Math.max(left.length,right.length);i++){
+    const L=left[i]; const R=right[i];
+    if (L){ doc.text(`${L[0]}:`, col1x, rowY); doc.text(String(L[1]), col1x + 120, rowY); }
+    if (R){ doc.text(`${R[0]}:`, col2x, rowY); doc.text(String(R[1]), col2x + 140, rowY); }
+    rowY += lineH;
   }
+  y = rowY + 8;
 
-  // capture map + output card
-  const mapEl = document.getElementById("map");
-  const outputEl = document.getElementById("outputCard");
-  const pdfHideEls = Array.from(document.querySelectorAll('.no-pdf'));
-  pdfHideEls.forEach(el => el.style.display = 'none');
-
-  async function captureElementToDataURL(el, scale = 1) {
-    if (!el) return null;
-    const canvas = await html2canvas(el, { scale: scale, useCORS: true, logging: false, backgroundColor: null });
-    try { return canvas.toDataURL("image/png"); }
-    catch (err) { console.warn("Canvas toDataURL failed (likely CORS/taint):", err); throw err; }
+  // Design & components
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.text("Design & Components", margin, y); y += 16;
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text("Pipe diameter (mm):", margin, y); doc.text(String(pipe_diam_mm ?? "N/A"), margin + 160, y); y += lineH;
+  if (chosenPipe) {
+    const name = chosenPipe.name || chosenPipe.id || JSON.stringify(chosenPipe);
+    const cost = inr(safe(chosenPipe, "total_cost", cost_pipe));
+    doc.text("Chosen pipe:", margin, y); doc.text(name + " — " + cost, margin + 120, y); y += lineH;
   }
-
-  let mapDataUrl = null;
-  let outputDataUrl = null;
-  try {
-    if (mapEl) mapDataUrl = await captureElementToDataURL(mapEl, 1.5);
-    if (outputEl) outputDataUrl = await captureElementToDataURL(outputEl, 1.5);
-  } catch (captureErr) {
-    console.warn("Element capture failed. Will generate PDF without map/image.", captureErr);
-  }
-
-  try {
-    if (mapDataUrl) {
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxW = pageW - margin * 2;
-          const maxH = pageH - cursorY - 150;
-          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-          const drawW = (img.width * ratio) - 100;
-          const drawH = img.height * ratio;
-          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
-          doc.addImage(mapDataUrl, "PNG", margin, cursorY, drawW, drawH);
-          cursorY += drawH + 12;
-          resolve();
-        };
-        img.onerror = () => resolve();
-        img.src = mapDataUrl;
-      });
+  if (filterChosen) {
+    doc.text("Recommended filter:", margin, y); doc.text((filterChosen.name || filterChosen.id) + " — " + inr(filterChosen.total_cost), margin + 140, y); y += lineH;
+  } else if (Array.isArray(filterCandidates) && filterCandidates.length) {
+    doc.text("Filter candidates:", margin, y); y += lineH;
+    const maxShow = 4;
+    for (let i=0;i<Math.min(filterCandidates.length,maxShow);i++){
+      const f=filterCandidates[i];
+      doc.text(`• ${f.name || f.id} — units: ${fmt(f.units_required)} — cost: ${inr(f.total_cost)}`, margin + 10, y);
+      y += lineH;
     }
-  } catch (err) { console.warn("Inserting map image into PDF failed:", err); }
+  }
 
+  doc.text("Pit volume (m³):", margin, y); doc.text(String(pit_vol_m3 ?? "N/A"), margin + 120, y); y += lineH;
+  doc.text("Pit estimate (INR):", margin, y); doc.text(inr(pit_cost), margin + 120, y); y += lineH;
+
+  doc.setFont("helvetica","bold"); doc.text("Cost breakdown", margin, y); y += 14;
+  doc.setFont("helvetica","normal");
+  doc.text("Pipe:", margin, y); doc.text(inr(cost_pipe), margin + 120, y); y += lineH;
+  doc.text("Filter:", margin, y); doc.text(inr(cost_filter), margin + 120, y); y += lineH;
+  doc.text("Pit / excavation:", margin, y); doc.text(inr(cost_pit), margin + 120, y); y += lineH;
+  doc.setFont("helvetica","bold");
+  doc.text("Total estimated installation cost:", margin, y); doc.text(inr(total_cost), margin + 240, y); y += lineH + 8;
+
+  doc.setFont("helvetica","normal");
+  doc.text("Aquifer classification:", margin, y); doc.text(String(aquifer || "N/A"), margin + 150, y); y += lineH;
+  doc.text("Feasibility:", margin, y); doc.text(feasibility === true ? "YES" : (feasibility === false ? "NO" : (coverageRatio ? (coverageRatio >= 0.25 ? "YES" : "NO") : "N/A")), margin + 120, y); y += lineH + 8;
+
+  doc.setFont("helvetica","bold"); doc.text("Recommendation:", margin, y); y += 14;
+  doc.setFont("helvetica","normal"); doc.text((suggestion || "See details"), margin, y, { maxWidth: usableW }); y += 36;
+
+  doc.setFont("helvetica","bold"); doc.text("Assumptions / model constants", margin, y); y += 14;
+  doc.setFont("helvetica","normal");
+  const assumptions = [
+    ["Floor height (m)", safe(server, "inputs.avgFloorHeight", "3.0")],
+    ["Velocity (m/s)", safe(server, "inputs.velocity_m_s", "2.5")],
+    ["Wet months used", safe(server, "inputs.wetMonths", "4")],
+    ["Filter safety factor", safe(server, "inputs.safetyFactorFilter", "0.8")],
+    ["Pit cost (INR/m³)", safe(server, "inputs.pit_cost_per_m3", "800")]
+  ];
+  for (const a of assumptions) { doc.text(`${a[0]}: ${fmt(a[1])}`, margin, y); y += lineH; }
+  y += 8;
+
+  // Map snapshot (try)
   try {
-    if (outputDataUrl) {
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxW = pageW - margin * 2;
-          const maxH = pageH - cursorY - 80;
-          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-          const drawW = img.width * ratio;
-          const drawH = img.height * ratio;
-          if (cursorY + drawH > pageH - 60) { doc.addPage(); cursorY = 48; }
-          doc.addImage(outputDataUrl, "PNG", margin, cursorY, drawW, drawH);
-          cursorY += drawH + 12;
-          resolve();
-        };
-        img.onerror = () => resolve();
-        img.src = outputDataUrl;
-      });
+    const mapEl = document.getElementById("map");
+    if (mapEl) {
+      const canvas = await html2canvas(mapEl, { scale: 1.2, useCORS: true, backgroundColor: null });
+      const dataUrl = canvas.toDataURL("image/png");
+      if (y + 200 > pageH - 120) { doc.addPage(); y = 48; }
+      const imgW = usableW; const imgH = (canvas.height * imgW) / canvas.width;
+      doc.addImage(dataUrl, "PNG", margin, y, imgW, Math.min(imgH, pageH - y - 120));
+      y += Math.min(imgH, pageH - y - 120) + 12;
     }
-  } catch (err) { console.warn("Inserting output image into PDF failed:", err); }
+  } catch (err) { console.warn("Map capture failed for PDF (continuing):", err); }
 
-  doc.setFontSize(9);
-  doc.text("Generated by JalRakshak 1.0", margin, pageH - 28);
+  // Appendix: server JSON
+  if (y + 160 > pageH - 80) { doc.addPage(); y = 48; }
+  doc.setFont("helvetica","bold"); doc.text("Appendix: Full server response (JSON)", margin, y); y += 14;
+  doc.setFont("courier","normal");
+  const jsonText = JSON.stringify(server, null, 2);
+  const maxCharPerLine = 90;
+  const wrapText = (text, maxC) => {
+    const lines = [];
+    text.split("\n").forEach(ln => {
+      if (ln.length <= maxC) lines.push(ln);
+      else {
+        let cur = ln;
+        while (cur.length > maxC) { lines.push(cur.slice(0, maxC)); cur = cur.slice(maxC); }
+        if (cur.length) lines.push(cur);
+      }
+    });
+    return lines;
+  };
+  const jsonLines = wrapText(jsonText, maxCharPerLine);
+  doc.setFontSize(8);
+  for (let i=0;i<jsonLines.length;i++){
+    if (y > pageH - 60) { doc.addPage(); y = 48; doc.setFontSize(8); }
+    doc.text(jsonLines[i], margin, y);
+    y += 10;
+  }
 
-  const districtSafe = (reportData.district || "report").replace(/[^\w\-]/g, "_");
-  const filename = `JalRakshak_Report_${districtSafe}.pdf`;
+  const outNameSafe = (district || "report").replace(/[^\w\-]/g, "_");
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text(`Generated by JalRakshak 1.0 — ${new Date().toLocaleString()}`, margin, pageH - 28);
+
   try {
-    doc.save(filename);
-    console.log("PDF saved:", filename);
+    doc.save(`JalRakshak_Report_${outNameSafe}.pdf`);
+    console.log("PDF saved:", `JalRakshak_Report_${outNameSafe}.pdf`);
   } catch (err) {
     console.error("Failed to save PDF:", err);
     alert("PDF generation failed. See console for details.");
   }
-
-  pdfHideEls.forEach(el => el.style.display = '');
 }
