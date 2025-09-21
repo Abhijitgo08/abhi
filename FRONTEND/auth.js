@@ -53,6 +53,16 @@
     }
   }
 
+  // ---------- small helper to normalize/extract userId ----------
+  function extractUserId(user) {
+    if (!user) return null;
+    if (typeof user === 'string') return user;
+    if (user.id) return String(user.id);
+    if (user._id && typeof user._id === 'string') return user._id;
+    if (user._id && user._id.$oid) return String(user._id.$oid);
+    return null;
+  }
+
   // ---- Location flow ----
   async function handleLocationFlow(token) {
     L(">>> entered handleLocationFlow");
@@ -165,48 +175,48 @@
 
   window.handleLocationFlow = handleLocationFlow;
 
-   /* ---------- Persistent blocking overlay (no user ack required) ---------- */
-function ensureBlockingOverlay() {
-  if (document.getElementById('auth-blocking-overlay')) return;
-  const overlay = document.createElement('div');
-  overlay.id = 'auth-blocking-overlay';
-  overlay.setAttribute('role', 'status');
-  overlay.setAttribute('aria-live', 'polite');
-  overlay.style.position = 'fixed';
-  overlay.style.inset = '0';
-  overlay.style.display = 'none';
-  overlay.style.alignItems = 'center';
-  overlay.style.justifyContent = 'center';
-  overlay.style.background = 'rgba(0,0,0,0.45)';
-  overlay.style.zIndex = '99999';
-  overlay.style.pointerEvents = 'auto';
-  overlay.style.backdropFilter = 'blur(2px)';
-  overlay.innerHTML = `
-    <div style="max-width:90%;width:360px;background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);text-align:center;font-family:Inter, system-ui, -apple-system;">
-      <div style="font-size:18px;font-weight:600;color:#094d22;margin-bottom:8px">Please wait</div>
-      <div style="font-size:14px;color:#374151;margin-bottom:12px">Fetching your location — this may take a moment</div>
-      <div aria-hidden="true" style="font-size:22px;line-height:1">⏳</div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-}
-
-function showBlockingOverlay(msg) {
-  ensureBlockingOverlay();
-  const overlay = document.getElementById('auth-blocking-overlay');
-  if (!overlay) return;
-  if (msg) {
-    const subtitle = overlay.querySelector('div > div:nth-child(2)');
-    if (subtitle) subtitle.textContent = msg;
+  /* ---------- Persistent blocking overlay (no user ack required) ---------- */
+  function ensureBlockingOverlay() {
+    if (document.getElementById('auth-blocking-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'auth-blocking-overlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.display = 'none';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(0,0,0,0.45)';
+    overlay.style.zIndex = '99999';
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.backdropFilter = 'blur(2px)';
+    overlay.innerHTML = `
+      <div style="max-width:90%;width:360px;background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);text-align:center;font-family:Inter, system-ui, -apple-system;">
+        <div style="font-size:18px;font-weight:600;color:#094d22;margin-bottom:8px">Please wait</div>
+        <div style="font-size:14px;color:#374151;margin-bottom:12px">Fetching your location — this may take a moment</div>
+        <div aria-hidden="true" style="font-size:22px;line-height:1">⏳</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
   }
-  overlay.style.display = 'flex';
-}
 
-function hideBlockingOverlay() {
-  const overlay = document.getElementById('auth-blocking-overlay');
-  if (!overlay) return;
-  overlay.style.display = 'none';
-}
+  function showBlockingOverlay(msg) {
+    ensureBlockingOverlay();
+    const overlay = document.getElementById('auth-blocking-overlay');
+    if (!overlay) return;
+    if (msg) {
+      const subtitle = overlay.querySelector('div > div:nth-child(2)');
+      if (subtitle) subtitle.textContent = msg;
+    }
+    overlay.style.display = 'flex';
+  }
+
+  function hideBlockingOverlay() {
+    const overlay = document.getElementById('auth-blocking-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'none';
+  }
 
   // ---- Signup ----
   async function signupHandler(e) {
@@ -228,27 +238,16 @@ function hideBlockingOverlay() {
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.user?.name || '');
-        function extractUserId(user) {
-  if (!user) return null;
-  // common shapes:
-  // { id: "..." } or { _id: "..." } or { _id: { $oid: "..." } }
-  if (typeof user === 'string') return user;
-  if (user.id) return String(user.id);
-  if (user._id && typeof user._id === 'string') return user._id;
-  if (user._id && user._id.$oid) return String(user._id.$oid);
-  return null;
-}
 
-// inside signup/login success block:
-const realId = extractUserId(data.user);
-if (realId) {
-  localStorage.setItem('userId', realId);
-} else {
-  // fallback - try other common keys
-  localStorage.setItem('userId', data.user?.id || data.user?._id || '');
-}
+        const realId = extractUserId(data.user);
+        if (realId) {
+          localStorage.setItem('userId', realId);
+        } else {
+          localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+        }
+
+        // Show overlay before asking geolocation permission
         showBlockingOverlay('Requesting location permission — please allow access when prompted');
-        showBlockingOverlay('Fetching your location — Be patience');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Signup failed');
@@ -280,26 +279,16 @@ if (realId) {
       if (res.ok && data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.user?.name || '');
-        function extractUserId(user) {
-  if (!user) return null;
-  // common shapes:
-  // { id: "..." } or { _id: "..." } or { _id: { $oid: "..." } }
-  if (typeof user === 'string') return user;
-  if (user.id) return String(user.id);
-  if (user._id && typeof user._id === 'string') return user._id;
-  if (user._id && user._id.$oid) return String(user._id.$oid);
-  return null;
-}
 
-// inside signup/login success block:
-const realId = extractUserId(data.user);
-if (realId) {
-  localStorage.setItem('userId', realId);
-} else {
-  // fallback - try other common keys
-  localStorage.setItem('userId', data.user?.id || data.user?._id || '');
-}
+        const realId = extractUserId(data.user);
+        if (realId) {
+          localStorage.setItem('userId', realId);
+        } else {
+          localStorage.setItem('userId', data.user?.id || data.user?._id || '');
+        }
 
+        // Show overlay before asking geolocation permission
+        showBlockingOverlay('Requesting location permission — please allow access when prompted');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
@@ -333,6 +322,8 @@ if (realId) {
     } catch (err) {
       L('handleLocationFlow threw', err);
     } finally {
+      // hide overlay immediately before redirecting so it does not flash on the next page
+      try { hideBlockingOverlay(); } catch (_) {}
       window.location.href = redirectUrl;
     }
   }
