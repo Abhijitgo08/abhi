@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("contactForm");
   const responseBox = document.getElementById("formResponse");
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const name = document.getElementById("name").value.trim();
@@ -18,12 +18,30 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Simulated response (later this will connect to backend API)
-    setTimeout(() => {
-      responseBox.textContent = `✅ Thank you, ${name}! Your message has been received.`;
-      responseBox.className = "mt-6 text-center text-lg font-semibold text-green-700";
-      responseBox.classList.remove("hidden");
-      form.reset();
-    }, 1000);
+    try {
+      const res = await fetch("http://localhost:5001/api/contact", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name, email, message }),
+});
+
+
+      const data = await res.json();
+
+      if (data.success) {
+        responseBox.textContent = `✅ Thank you, ${name}! Your message has been received.`;
+        responseBox.className = "mt-6 text-center text-lg font-semibold text-green-700";
+        form.reset();
+      } else {
+        responseBox.textContent = `❌ Failed to send message: ${data.message || "Server error"}`;
+        responseBox.className = "mt-6 text-center text-lg font-semibold text-red-600";
+      }
+    } catch (err) {
+      console.error(err);
+      responseBox.textContent = "❌ Error: Could not connect to server.";
+      responseBox.className = "mt-6 text-center text-lg font-semibold text-red-600";
+    }
+
+    responseBox.classList.remove("hidden");
   });
 });
