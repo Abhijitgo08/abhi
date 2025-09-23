@@ -565,7 +565,6 @@ analyzeBtn.addEventListener("click", async () => {
           <li><strong>Aquifer:</strong> ${aquiferType}</li>
           <li><strong>Channel length (m):</strong> ${data.channel?.channel_length_m ?? "N/A"}</li>
           <li><strong>Channel cost (INR):</strong> ${data.channel?.channel_cost ? "₹" + Number(data.channel.channel_cost).toLocaleString() : "N/A"}</li>
-          <li><strong>Filter safety factor used:</strong> ${DEFAULTS.safetyFactorFilter}</li>
         </ul>
       </details>
     `;

@@ -344,84 +344,152 @@
 <script src="dashboard.js"></script>
 
 <!-- dropdown behavior & integration helper -->
+<!-- dropdown behavior & integration helper (REPLACE your existing block with this) -->
 <script>
-  (function () {
-    const root = document.getElementById('surfaceDropdownRoot');
-    const btn = document.getElementById('surfaceDropdownBtn');
-    const menu = document.getElementById('surfaceDropdownMenu');
-    const labelEl = document.getElementById('surfaceDropdownLabel');
+(function () {
+  const root = document.getElementById('surfaceDropdownRoot');
+  const btn = document.getElementById('surfaceDropdownBtn');
+  const menu = document.getElementById('surfaceDropdownMenu');
+  const labelEl = document.getElementById('surfaceDropdownLabel');
 
-    function updateLabel() {
-      const vals = getSelectedGroundSurfaces();
-      if (!vals || vals.length === 0) labelEl.textContent = 'Select surface types…';
-      else if (vals.length === 1) {
-        const el = menu.querySelector('input[type="checkbox"][value="' + vals[0] + '"]');
-        labelEl.textContent = el ? el.parentElement.querySelector('.label').innerText.trim() : vals[0];
-      } else {
-        labelEl.textContent = vals.length + ' selected';
-      }
+  // === CONFIG ===
+  // Set to true to append the menu to document.body (most robust if parent containers/Leaflet clip it).
+  // If true, the menu will be absolutely positioned when opened.
+  const APPEND_TO_BODY = true;
+
+  // If APPEND_TO_BODY is true, move the menu now (keeps original DOM order visually).
+  if (APPEND_TO_BODY && menu.parentElement !== document.body) {
+    // keep a reference to original parent for hit-testing if needed
+    root._menuWasMoved = true;
+    document.body.appendChild(menu);
+    // ensure menu is positioned absolutely; top/left set on open
+    menu.style.position = 'absolute';
+  }
+
+  function updateLabel() {
+    const vals = getSelectedGroundSurfaces();
+    if (!vals || vals.length === 0) labelEl.textContent = 'Select surface types…';
+    else if (vals.length === 1) {
+      const el = menu.querySelector('input[type="checkbox"][value="' + vals[0] + '"]');
+      labelEl.textContent = el ? el.parentElement.querySelector('.label').innerText.trim() : vals[0];
+    } else {
+      labelEl.textContent = vals.length + ' selected';
     }
+  }
 
-    // toggle menu
-    btn.addEventListener('click', (e) => {
-      const open = menu.style.display === 'block';
-      menu.style.display = open ? 'none' : 'block';
-      btn.setAttribute('aria-expanded', String(!open));
-    });
+  function openMenu() {
+    // If menu appended to body, compute its top/left relative to viewport so it sits under the button
+    if (menu.parentElement === document.body) {
+      const rect = btn.getBoundingClientRect();
+      // position right under button; ensure it remains within viewport horizontally
+      const left = Math.max(8, rect.left);
+      menu.style.left = left + 'px';
+      menu.style.top = (rect.bottom + 6) + 'px';
+      // match button width for neatness
+      menu.style.width = rect.width + 'px';
+    } else {
+      // when menu stays inside root, make sure it's visible
+      menu.style.left = '';
+      menu.style.top = '';
+      menu.style.width = '';
+    }
+    menu.style.display = 'block';
+    btn.setAttribute('aria-expanded', 'true');
+  }
 
-    // close when clicking outside
-    document.addEventListener('click', (ev) => {
-      if (!root.contains(ev.target)) { menu.style.display = 'none'; btn.setAttribute('aria-expanded', 'false'); }
-    });
+  function closeMenu() {
+    menu.style.display = 'none';
+    btn.setAttribute('aria-expanded', 'false');
+  }
 
-    // interactive rows - clicking row toggles checkbox
-    menu.querySelectorAll('.surface-item').forEach(row => {
-      const cb = row.querySelector('input[type="checkbox"]');
-      row.addEventListener('click', (ev) => {
-        // prevent double toggles from label->input
-        if (ev.target.tagName.toLowerCase() === 'input') {
-          // user clicked the checkbox itself
-          cb.checked = !cb.checked; // ensure state toggled
-        } else {
-          cb.checked = !cb.checked;
-        }
-        updateLabel();
-      });
-      // keyboard accessibility
-      row.addEventListener('keydown', (ev) => {
-        if (ev.key === ' ' || ev.key === 'Enter') {
-          ev.preventDefault();
-          cb.checked = !cb.checked;
-          updateLabel();
-        }
-      });
-    });
+  // Toggle menu on button click. Stop propagation so outside click handler doesn't immediately close it.
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.style.display === 'block';
+    if (open) closeMenu();
+    else openMenu();
+  });
 
-    // helper used by dashboard.js: returns array of values
-    window.getSelectedGroundSurfaces = function () {
-      const v = [];
-      menu.querySelectorAll('input[type="checkbox"]').forEach(i => { if (i.checked) v.push(i.value); });
-      return v;
-    };
+  // Close on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenu();
+  });
 
-    // Make sure includeOpenSpace checkbox is clickable even if dropdown overlaps:
-    const include = document.getElementById('includeOpenSpace');
-    include.addEventListener('change', () => {
-      // show a tiny tip to guide the user
-      if (include.checked) {
-        // open the dropdown automatically to encourage selection
-        menu.style.display = 'block';
-        btn.setAttribute('aria-expanded', 'true');
-        setTimeout(() => updateLabel(), 10);
+  // Click outside -> close. Works whether menu is moved to body or not.
+  document.addEventListener('click', (ev) => {
+    const clickedInsideBtn = btn.contains(ev.target);
+    const clickedInsideMenu = menu.contains(ev.target);
+    // If menu is appended to body, root.contains won't apply to menu; use menu.contains instead.
+    if (!clickedInsideBtn && !clickedInsideMenu) closeMenu();
+  });
+
+  // Interactive rows - clicking the row toggles checkbox ONCE.
+  menu.querySelectorAll('.surface-item').forEach(row => {
+    const cb = row.querySelector('input[type="checkbox"]');
+
+    row.addEventListener('click', (ev) => {
+      // prevent the click from bubbling to document which might close the menu
+      ev.stopPropagation();
+
+      // If the actual input was the click target, let the browser handle the toggle (do nothing).
+      // Otherwise toggle the checkbox manually. This avoids double toggles when the label/input
+      // already toggles natively.
+      const targetTag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : '';
+      if (targetTag === 'input') {
+        // nothing — keep native behavior
       } else {
-        menu.style.display = 'none';
-        btn.setAttribute('aria-expanded', 'false');
+        cb.checked = !cb.checked;
+      }
+      updateLabel();
+    });
+
+    // keyboard accessibility (Enter or Space toggles)
+    row.addEventListener('keydown', (ev) => {
+      if (ev.key === ' ' || ev.key === 'Enter') {
+        ev.preventDefault();
+        cb.checked = !cb.checked;
+        updateLabel();
       }
     });
 
-    // initial label state
-    updateLabel();
-  })();
+    // Also update label if user toggles checkbox directly (keyboard focus on checkbox)
+    cb.addEventListener('change', (ev) => {
+      updateLabel();
+    });
+  });
+
+  // helper used by dashboard.js: returns array of values
+  window.getSelectedGroundSurfaces = function () {
+    const v = [];
+    menu.querySelectorAll('input[type="checkbox"]').forEach(i => { if (i.checked) v.push(i.value); });
+    return v;
+  };
+
+  // Ensure includeOpenSpace checkbox reveals menu without conflict
+  const include = document.getElementById('includeOpenSpace');
+  include.addEventListener('change', () => {
+    if (include.checked) {
+      openMenu();
+      // ensure label shows current selections shortly after opening
+      setTimeout(updateLabel, 10);
+    } else {
+      closeMenu();
+    }
+  });
+
+  // When window resizes, reposition the menu if it's appended to body and currently open
+  window.addEventListener('resize', () => {
+    if (menu.style.display === 'block' && menu.parentElement === document.body) {
+      const rect = btn.getBoundingClientRect();
+      menu.style.left = Math.max(8, rect.left) + 'px';
+      menu.style.top = (rect.bottom + 6) + 'px';
+      menu.style.width = rect.width + 'px';
+    }
+  });
+
+  // Initial label state
+  updateLabel();
+})();
 </script>
 
 <!-- Tutorial Modal -->
