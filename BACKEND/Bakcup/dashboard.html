@@ -15,8 +15,6 @@
     body { font-family: 'Inter', sans-serif; background: url('back.jpeg') no-repeat center center fixed; background-size: cover; }
     h1, h2, h3 { font-family: 'Poppins', sans-serif; }
     #map { height: 400px; border-radius: 12px; }
-    /* tutorial box */
-    .tip-box { background: rgba(255,255,255,0.85); border-radius: 8px; padding: 12px; }
   </style>
 </head>
 <body class="text-gray-800 min-h-screen flex flex-col">
@@ -40,21 +38,6 @@
 <!-- Dashboard Content -->
 <main class="flex-1 px-8 py-10">
   <h1 class="text-3xl font-bold text-white mb-8">Welcome, <span id="userName">User</span> 👋</h1>
-
-  <!-- Quick Tips -->
-  <section class="mb-6">
-    <div class="tip-box">
-      <h3 class="text-lg font-semibold">Quick Tips — How to draw & analyze</h3>
-      <ol class="mt-2 text-sm list-decimal list-inside text-gray-700">
-        <li>Decide whether to include the open-space / courtyard by checking <strong>Include open-space</strong>.</li>
-        <li>Draw the <strong>Roof polygon first</strong> (blue). Use the draw tool, then click corners. Finish polygon to compute roof area.</li>
-        <li>If open-space is enabled, draw the <strong>Ground polygon next</strong> (orange). Draw separately — each polygon is independent and editable.</li>
-        <li>Select one or more surface types for the ground; we average their impermeability midpoints to compute ground runoff coefficient.</li>
-        <li>Click <strong>Run Feasibility Analysis</strong>. The report will include roof-only, ground-only (if chosen) and combined calculations.</li>
-        <li>Want precise channel length to pit? After this you can choose a pit location and we will compute exact shortest distance (future enhancement).</li>
-      </ol>
-    </div>
-  </section>
 
   <!-- Step 1: Input -->
   <section class="mb-12">
@@ -96,7 +79,7 @@
         <input type="number" id="floors" placeholder="e.g. 1" min="0" value="1"
           class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
                  focus:ring-2 focus:ring-green-500 outline-none">
-        <p class="mt-2 text-xs text-gray-600">Used to compute vertical pipe length = floors × floor height.</p>
+        <p class="mt-2 text-xs text-gray-600">Used to compute pipe length = floors × floor height.</p>
       </div>
 
       <!-- Soil Type (new) -->
@@ -111,44 +94,16 @@
         </select>
         <p class="mt-2 text-xs text-gray-600">Soil affects infiltration fraction used for pit sizing.</p>
       </div>
-
-      <!-- Include open-space -->
-      <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow col-span-2">
-        <label class="inline-flex items-center space-x-3">
-          <input id="includeOpenSpace" type="checkbox" class="rounded border-gray-300 text-green-600 shadow-sm focus:ring-green-500">
-          <span class="text-sm font-medium text-gray-700">Include open-space / courtyard in calculation</span>
-        </label>
-        <p class="mt-2 text-xs text-gray-600">If checked, draw a second polygon (ground/open area) and choose surface types below.</p>
-
-        <!-- Ground surface type multi-select -->
-        <label class="block mt-4 text-sm font-medium text-gray-700">Open-space Surface Types (choose one or more)</label>
-        <select id="groundSurfaceSelect" multiple size="5"
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
-          <option value="water_tight">Water tight surface (very impervious)</option>
-          <option value="asphalt">Asphaltic pavement</option>
-          <option value="stone_brick">Stone/brick with tight joints</option>
-          <option value="open_joints">Stone/brick w/ open or uncemented joints</option>
-          <option value="inferior_blocks">Inferior block pavements (open joints)</option>
-          <option value="macadam">Macadamized road</option>
-          <option value="gravel">Gravel road/walks</option>
-          <option value="unpaved">Unpaved / vacant lots</option>
-          <option value="parks">Parks / lawns / meadows</option>
-          <option value="dense_built">Most densely populated / built-up</option>
-        </select>
-        <p class="mt-2 text-xs text-gray-600">Selected types are averaged to compute an effective runoff coefficient for the ground.</p>
-      </div>
     </div>
   </section>
 
   <!-- Step 2: Map -->
   <section class="mb-12">
-    <h2 class="text-2xl font-semibold text-white mb-4">2. Mark Your Roof (and Open Space)</h2>
+    <h2 class="text-2xl font-semibold text-white mb-4">2. Mark Your Roof</h2>
     <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
       <div id="map"></div>
-      <p class="mt-3 text-sm text-gray-700">Draw polygon(s) on the map. If open-space is enabled, draw roof polygon first, then ground polygon. You can edit polygons using the edit tool.</p>
+      <p class="mt-3 text-sm text-gray-700">Mark the points of polygon over your roof to calculate its area and click finish.</p>
       <p class="mt-2 font-semibold text-blue-600">Roof Area: <span id="roofArea">0</span> m²</p>
-      <p class="mt-1 font-semibold text-orange-600 hidden" id="groundAreaWrap">Ground Area: <span id="groundArea">0</span> m²</p>
     </div>
   </section>
 
@@ -188,7 +143,7 @@
 <!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-<!--app script -->
+<!-- Your app script -->
 <script src="dashboard.js"></script>
 </body>
 </html>

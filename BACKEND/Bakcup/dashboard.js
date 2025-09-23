@@ -1,5 +1,5 @@
-// dashboard.js — updated to support optional open-space polygon, geometry-based channel length,
-// Manning velocity formula, horizontal+vertical pipe length, and best-fit filter selection.
+// dashboard.js — complete file with floors & soil, improved suggestion & PDF
+// Requires: leaflet, leaflet-draw, turf, html2canvas, jsPDF (your HTML already includes them)
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -8,21 +8,14 @@ const designCard = document.getElementById("designCard");
 const outputCard = document.getElementById("outputCard");
 const userName = document.getElementById("userName");
 const roofAreaSpan = document.getElementById("roofArea");
-const groundAreaSpan = document.getElementById("groundArea");
-const groundAreaWrap = document.getElementById("groundAreaWrap");
 
 const locationSelect = document.getElementById("locationSelect");
 const locationMeta = document.getElementById("locationMeta");
-const includeOpenSpaceCheckbox = document.getElementById("includeOpenSpace");
-const groundSurfaceSelect = document.getElementById("groundSurfaceSelect");
 
 // ===== CONFIG =====
 const API_BASE = (location.hostname === 'localhost') ? 'http://localhost:10000' : '';
 const token = localStorage.getItem("token");
-if (!token) {
-  // if you want to allow anonymous, comment this out
-  window.location.href = "auth.html";
-}
+if (!token) window.location.href = "auth.html";
 userName.textContent = localStorage.getItem("userName") || "User";
 
 // ----------------- INTERNAL DEFAULTS -----------------
@@ -70,21 +63,17 @@ map.on('zoomend', () => {
   }
 });
 
-// Draw control (polygons)
-const drawnGroup = new L.FeatureGroup();
-map.addLayer(drawnGroup);
+// Draw control (single polygon)
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
 const drawControl = new L.Control.Draw({
   draw: {
-    polygon: { allowIntersection: false, showArea: true },
-    polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false
+    polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+    polygon: { allowIntersection: false, showArea: true, showLength: false }
   },
-  edit: { featureGroup: drawnGroup }
+  edit: { featureGroup: drawnItems }
 });
 map.addControl(drawControl);
-
-// We'll keep explicit references to roof and ground layers
-let roofLayer = null;
-let groundLayer = null;
 
 // turf helper
 function latlngsToTurfPolygon(latlngs) {
@@ -95,103 +84,43 @@ function latlngsToTurfPolygon(latlngs) {
   return turf.polygon([coords]);
 }
 
-function calculateAreaOfLayer(layer) {
+// drawing events
+map.on(L.Draw.Event.CREATED, (e) => {
+  drawnItems.clearLayers();
+  const layer = e.layer;
+  drawnItems.addLayer(layer);
+  const latlngs = layer.getLatLngs()[0];
   try {
-    const latlngs = layer.getLatLngs ? layer.getLatLngs()[0] : null;
-    if (!latlngs) return 0;
     const poly = latlngsToTurfPolygon(latlngs);
-    return Math.round(turf.area(poly));
+    const area = turf.area(poly);
+    window.selectedRoofArea = Math.round(area);
+    roofAreaSpan.textContent = window.selectedRoofArea;
   } catch (err) {
     console.warn("Area calc failed", err);
-    try {
-      if (L.GeometryUtil && typeof L.GeometryUtil.geodesicArea === "function") {
-        const latlngs = layer.getLatLngs ? layer.getLatLngs()[0] : [];
-        const fallback = L.GeometryUtil.geodesicArea(latlngs);
-        return Math.round(fallback);
-      }
-    } catch (e) { }
-    return 0;
-  }
-}
-
-// style helpers
-function styleForRoof() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.2 }; }
-function styleForGround() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.2 }; }
-
-// Manage draw created event: assign polygons to roof/ground based on includeOpenSpace and current state
-map.on(L.Draw.Event.CREATED, (e) => {
-  const layer = e.layer;
-  // decide role
-  const includeGround = !!includeOpenSpaceCheckbox?.checked;
-  if (!includeGround) {
-    // clear existing and assign to roof only
-    if (roofLayer) drawnGroup.removeLayer(roofLayer);
-    if (groundLayer) { drawnGroup.removeLayer(groundLayer); groundLayer = null; }
-    roofLayer = layer;
-    if (layer.setStyle) layer.setStyle(styleForRoof());
-    drawnGroup.addLayer(layer);
-  } else {
-    // allow two polygons: first drawn -> roof, second drawn -> ground
-    if (!roofLayer) {
-      roofLayer = layer;
-      if (layer.setStyle) layer.setStyle(styleForRoof());
-      drawnGroup.addLayer(layer);
-    } else if (!groundLayer) {
-      groundLayer = layer;
-      if (layer.setStyle) layer.setStyle(styleForGround());
-      drawnGroup.addLayer(layer);
+    if (L.GeometryUtil && typeof L.GeometryUtil.geodesicArea === "function") {
+      const fallback = L.GeometryUtil.geodesicArea(latlngs);
+      window.selectedRoofArea = Math.round(fallback);
+      roofAreaSpan.textContent = window.selectedRoofArea;
     } else {
-      // both exist: replace ground by the new layer (so user can re-draw the ground)
-      drawnGroup.removeLayer(groundLayer);
-      groundLayer = layer;
-      if (layer.setStyle) layer.setStyle(styleForGround());
-      drawnGroup.addLayer(layer);
+      window.selectedRoofArea = 0;
+      roofAreaSpan.textContent = 0;
     }
   }
-  // update displayed areas
-  updateAreaDisplays();
 });
-
-// Handle edit event (recalculate areas)
-map.on(L.Draw.Event.EDITED, (e) => { updateAreaDisplays(); });
-
-// When layers are deleted via the edit toolbar, clear refs
-map.on(L.Draw.Event.DELETED, (e) => {
+map.on(L.Draw.Event.EDITED, (e) => {
   const layers = e.layers;
-  layers.eachLayer((ly) => {
-    if (roofLayer && ly === roofLayer) roofLayer = null;
-    if (groundLayer && ly === groundLayer) groundLayer = null;
-  });
-  updateAreaDisplays();
-});
-
-// update area spans and UI visibility
-function updateAreaDisplays() {
-  const roofArea = roofLayer ? calculateAreaOfLayer(roofLayer) : 0;
-  const groundArea = groundLayer ? calculateAreaOfLayer(groundLayer) : 0;
-  window.selectedRoofArea = roofArea;
-  window.selectedGroundArea = groundArea;
-  roofAreaSpan.textContent = roofArea;
-  if (groundArea > 0) {
-    groundAreaWrap.classList.remove("hidden");
-    groundAreaSpan.textContent = groundArea;
-  } else {
-    groundAreaWrap.classList.add("hidden");
-    groundAreaSpan.textContent = 0;
-  }
-}
-
-// When includeOpenSpace toggled off, remove ground poly & UI
-includeOpenSpaceCheckbox?.addEventListener('change', (e) => {
-  if (!includeOpenSpaceCheckbox.checked) {
-    if (groundLayer) {
-      drawnGroup.removeLayer(groundLayer);
-      groundLayer = null;
+  layers.eachLayer((layer) => {
+    const latlngs = layer.getLatLngs()[0];
+    try {
+      const poly = latlngsToTurfPolygon(latlngs);
+      const area = turf.area(poly);
+      window.selectedRoofArea = Math.round(area);
+      roofAreaSpan.textContent = window.selectedRoofArea;
+    } catch (err) {
+      console.warn("Edited area calc fallback", err);
+      window.selectedRoofArea = window.selectedRoofArea || 0;
     }
-    updateAreaDisplays();
-  } else {
-    alert("Open-space enabled. Draw roof polygon first, then draw ground polygon (a different color).");
-  }
+  });
 });
 
 // ----------------- LOCATION helpers -----------------
@@ -220,7 +149,12 @@ function populateLocationSelect(options = [], chosenLocation = null) {
     opt.value = idStr;
     opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
     opt.dataset.loc = JSON.stringify({
-      id: idStr, address: loc.address || null, lat: loc.lat ?? null, lng: loc.lng ?? null, raw: loc.raw ?? null, distance_m: loc.distance_m ?? null
+      id: idStr,
+      address: loc.address || null,
+      lat: loc.lat ?? null,
+      lng: loc.lng ?? null,
+      raw: loc.raw ?? null,
+      distance_m: loc.distance_m ?? null
     });
     locationSelect.appendChild(opt);
   });
@@ -337,25 +271,10 @@ if (locationSelect) {
 loadLocationOptions();
 
 // ----------------- ANALYSIS (call backend) -----------------
-
-// mapping of ground surface option keys to impermeability midpoints (derived from provided table)
-const GROUND_IMPERMEABILITY = {
-  water_tight: 0.825, asphalt: 0.875, stone_brick: 0.8, open_joints: 0.6,
-  inferior_blocks: 0.45, macadam: 0.425, gravel: 0.225, unpaved: 0.2, parks: 0.15, dense_built: 0.8
-};
-
 analyzeBtn.addEventListener("click", async () => {
   const roofArea = window.selectedRoofArea || 0;
-  const groundArea = window.selectedGroundArea || 0;
-  const includeGround = !!includeOpenSpaceCheckbox.checked;
-
   if (!roofArea || roofArea <= 0) {
     alert("Please draw your roof polygon on the map first!");
-    return;
-  }
-
-  if (includeGround && (!groundArea || groundArea <= 0)) {
-    alert("You selected open-space inclusion. Please draw the ground polygon as well.");
     return;
   }
 
@@ -373,12 +292,25 @@ analyzeBtn.addEventListener("click", async () => {
       } catch (err) { console.warn("Could not parse dataset.loc", err); }
     }
   }
-  if ((isNaN(lat) || isNaN(lng)) && drawnGroup.getLayers().length > 0) {
+  if ((isNaN(lat) || isNaN(lng)) && drawnItems.getLayers().length > 0) {
     try {
-      const centerLayer = roofLayer || drawnGroup.getLayers()[0];
-      if (centerLayer && typeof centerLayer.getBounds === "function") {
-        const c = centerLayer.getBounds().getCenter();
+      const layer = drawnItems.getLayers()[0];
+      if (layer && typeof layer.getBounds === "function") {
+        const c = layer.getBounds().getCenter();
         lat = Number(c.lat); lng = Number(c.lng);
+      } else if (layer && typeof layer.getLatLngs === "function") {
+        const latlngs = layer.getLatLngs()[0] || [];
+        if (latlngs && latlngs.length) {
+          const coords = latlngs.map(p => [p.lng, p.lat]);
+          if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) coords.push(coords[0]);
+          if (window.turf) {
+            const poly = turf.polygon([coords]); const c = turf.centroid(poly);
+            lat = c?.geometry?.coordinates?.[1]; lng = c?.geometry?.coordinates?.[0];
+          } else {
+            const avg = coords.reduce((acc, cur) => [acc[0]+cur[0], acc[1]+cur[1]], [0,0]).map(v=>v/coords.length);
+            lng = avg[0]; lat = avg[1];
+          }
+        }
       }
     } catch (err) { console.warn("Could not determine polygon center", err); }
   }
@@ -405,19 +337,6 @@ analyzeBtn.addEventListener("click", async () => {
   const soilEl = document.getElementById("soilType");
   const soilType = soilEl ? (soilEl.value || null) : null;
 
-  // ground surface selections (multiple)
-  const groundSelections = [];
-  if (includeGround && groundSurfaceSelect) {
-    for (let i = 0; i < groundSurfaceSelect.options.length; i++) {
-      const o = groundSurfaceSelect.options[i];
-      if (o.selected) groundSelections.push(o.value);
-    }
-    if (groundSelections.length === 0) {
-      alert("Please select at least one surface type for the open-space area (so we can compute runoff coefficient).");
-      return;
-    }
-  }
-
   // validation (backend expects lat, lng, roofArea, roofType, dwellers, floors)
   if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers) || isNaN(floors)) {
     analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers, floors</p>`;
@@ -425,36 +344,9 @@ analyzeBtn.addEventListener("click", async () => {
     return;
   }
 
-  // compute effective ground runoff coefficient (average of selected keys)
-  let groundRunoffCoeff = null;
-  if (includeGround) {
-    const vals = groundSelections.map(k => (GROUND_IMPERMEABILITY[k] ?? null)).filter(v => v !== null);
-    if (vals.length > 0) {
-      groundRunoffCoeff = vals.reduce((a,b) => a + b, 0) / vals.length;
-    } else {
-      groundRunoffCoeff = 0.3;
-    }
-  }
-
-  // prepare polygons: arrays of {lat,lng}
-  const roofPolygon = (roofLayer && typeof roofLayer.getLatLngs === 'function') ? roofLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
-  const groundPolygon = (groundLayer && typeof groundLayer.getLatLngs === 'function') ? groundLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
-
   // build payload
-  const payload = {
-    lat, lng, roofArea, roofType, dwellers, floors,
-    avgFloorHeight: DEFAULTS.avgFloorHeight,
-    velocity_m_s: DEFAULTS.velocity_m_s,
-    wetMonths: DEFAULTS.wetMonths,
-    safetyFactorFilter: DEFAULTS.safetyFactorFilter,
-    pit_cost_per_m3: DEFAULTS.pit_cost_per_m3,
-    includeGround: !!includeGround,
-    groundArea: includeGround ? groundArea : 0,
-    groundSurfaces: includeGround ? groundSelections : [],
-    groundRunoffCoeffClient: includeGround ? groundRunoffCoeff : null,
-    roofPolygon,
-    groundPolygon
-  };
+  const payload = { lat, lng, roofArea, roofType, dwellers, floors, avgFloorHeight: DEFAULTS.avgFloorHeight, velocity_m_s: DEFAULTS.velocity_m_s, wetMonths: DEFAULTS.wetMonths, safetyFactorFilter: DEFAULTS.safetyFactorFilter, pit_cost_per_m3: DEFAULTS.pit_cost_per_m3 };
+  if (soilType) payload.soilType = soilType;
 
   try {
     const res = await fetch(API_BASE + '/api/calc', {
@@ -474,9 +366,10 @@ analyzeBtn.addEventListener("click", async () => {
     const litersPerYear = data.runoff_liters_per_year ?? data.litersPerYear ?? data.runoff ?? 0;
     const estimatedCost = data.costs?.total_estimated_installation_cost ?? data.estimatedCost ?? data.cost ?? 0;
     const suffMonths = data.sufficiencyMonths ?? data.sufficiency_months ?? data.sufficiency ?? null;
+    const suggestionServer = data.suggestion ?? data.recommendation ?? null;
     const coverageRatio = data.coverageRatio ?? null;
 
-    // UI suggestion - uses total runoff
+    // determine UI suggestion: storage tank + pit if harvest >= annual need, else pit + supplements
     const ANNUAL_NEED_PER_PERSON_LPD = 85;
     const annualNeed = Math.round((dwellers || 0) * ANNUAL_NEED_PER_PERSON_LPD * 365);
     let suggestionUI;
@@ -486,7 +379,7 @@ analyzeBtn.addEventListener("click", async () => {
       suggestionUI = "Consider Recharge Pit with supplemental sources";
     }
 
-    // show summary
+    // show summary (headline uses suggestionUI)
     analysisResult.innerHTML = `
       <p class="text-lg">Feasibility: 
         <span class="font-bold ${(coverageRatio !== null ? (coverageRatio >= 0.25) : (data.feasibility === true || data.feasibility === 'YES')) ? "text-green-600" : "text-red-600"}">
@@ -507,7 +400,7 @@ analyzeBtn.addEventListener("click", async () => {
       </p>
     `;
 
-    // design card
+    // design card (summary + collapse details containing filter/pipe/pit)
     designCard.classList.remove("hidden");
     const filterName = data.filters?.chosen?.name || (Array.isArray(data.filters?.candidates) && data.filters.candidates[0]?.name) || "N/A";
     const pipeName = data.pipe?.chosen_option?.name || data.pipe?.chosen_option?.id || "N/A";
@@ -562,9 +455,6 @@ analyzeBtn.addEventListener("click", async () => {
         dwellers,
         floors,
         soilType,
-        includeGround,
-        groundArea: includeGround ? groundArea : 0,
-        groundSurfaces: includeGround ? groundSelections : [],
         rainfall_mm: data.rainfall_mm ?? data.rainfall ?? null,
         litersPerYear,
         estimatedCost,
@@ -586,6 +476,7 @@ analyzeBtn.addEventListener("click", async () => {
 });
 
 // ----------------- PDF GENERATION (improved) -----------------
+// generatePDF (clean) — removes the JSON appendix
 async function generatePDF(reportData) {
   if (!window.jspdf) {
     alert("PDF generation requires jsPDF. Ensure jsPDF script is included.");
@@ -624,7 +515,6 @@ async function generatePDF(reportData) {
   const user = localStorage.getItem("userName") || "User";
   const district = reportData.district || safe(server, "inputs.address") || safe(server, "district") || "";
   const roofArea = safe(server, "inputs.roofArea", safe(server, "roofArea", window.selectedRoofArea || "N/A"));
-  const groundArea = reportData.includeGround ? (reportData.groundArea ?? safe(server, "groundArea", window.selectedGroundArea || 0)) : 0;
   const roofType = reportData.roofType || safe(server, "inputs.roofType") || safe(server, "roofType");
   const dwellers = reportData.dwellers ?? safe(server, "inputs.dwellers") ?? safe(server, "dwellers");
   const floors = safe(server, "inputs.floors", reportData.floors ?? "N/A");
@@ -632,8 +522,6 @@ async function generatePDF(reportData) {
 
   const rainfall_mm = reportData.rainfall_mm ?? safe(server, "rainfall_mm") ?? safe(server, "rainfall") ?? "N/A";
   const runoff_lpy = safe(server, "runoff_liters_per_year", safe(server, "litersPerYear", safe(server, "runoff", 0)));
-  const runoff_roof_lpy = safe(server, "runoff_roof_liters_per_year", null);
-  const runoff_ground_lpy = safe(server, "runoff_ground_liters_per_year", null);
   const infiltrated_lpy = safe(server, "infiltrated_liters_per_year", null);
   const annualNeed_L = safe(server, "annualNeed", Math.round((dwellers || 0) * 85 * 365));
   const coverageRatio = safe(server, "coverageRatio", (annualNeed_L && runoff_lpy) ? (runoff_lpy / annualNeed_L) : null);
@@ -648,7 +536,6 @@ async function generatePDF(reportData) {
   const cost_pipe = safe(server, "costs.chosen_pipe_cost", null);
   const cost_filter = safe(server, "costs.chosen_filter_cost", null);
   const cost_pit = pit_cost ?? safe(server, "costs.pit_cost", null);
-  const cost_channel = safe(server, "costs.channel_cost", null);
   const total_cost = safe(server, "costs.total_estimated_installation_cost", reportData.estimatedCost ?? null);
 
   const aquifer = safe(server, "aquifer.type", "N/A");
@@ -674,7 +561,6 @@ async function generatePDF(reportData) {
 
   const left = [
     ["Roof area (m²)", fmt(roofArea)],
-    ["Ground area (m²)", fmt(groundArea)],
     ["Roof type", roofType || "N/A"],
     ["Floors", fmt(floors)],
     ["Soil", soilType || "N/A"],
@@ -683,16 +569,15 @@ async function generatePDF(reportData) {
   const right = [
     ["Annual rainfall (mm)", fmt(rainfall_mm)],
     ["Potential harvest (L/yr)", fmt(runoff_lpy)],
-    ["Roof harvest (L/yr)", fmt(runoff_roof_lpy)],
-    ["Ground harvest (L/yr)", fmt(runoff_ground_lpy)],
+    ["Infiltrated (L/yr)", fmt(infiltrated_lpy)],
     ["Annual need (L/yr)", fmt(annualNeed_L)],
     ["Coverage ratio", coverageRatio != null ? (Number(coverageRatio) * 100).toFixed(1) + "%" : "N/A"]
   ];
   let rowY = y;
   for (let i=0;i<Math.max(left.length,right.length);i++){
     const L=left[i]; const R=right[i];
-    if (L){ doc.text(`${L[0]}:`, col1x, rowY); doc.text(String(L[1]), col1x + 140, rowY); }
-    if (R){ doc.text(`${R[0]}:`, col2x, rowY); doc.text(String(R[1]), col2x + 160, rowY); }
+    if (L){ doc.text(`${L[0]}:`, col1x, rowY); doc.text(String(L[1]), col1x + 120, rowY); }
+    if (R){ doc.text(`${R[0]}:`, col2x, rowY); doc.text(String(R[1]), col2x + 140, rowY); }
     rowY += lineH;
   }
   y = rowY + 8;
@@ -720,14 +605,12 @@ async function generatePDF(reportData) {
 
   doc.text("Pit volume (m³):", margin, y); doc.text(String(pit_vol_m3 ?? "N/A"), margin + 120, y); y += lineH;
   doc.text("Pit estimate (INR):", margin, y); doc.text(inr(pit_cost), margin + 120, y); y += lineH;
-  if (cost_channel) { doc.text("Channel cost (INR):", margin, y); doc.text(inr(cost_channel), margin + 120, y); y += lineH; }
 
   doc.setFont("helvetica","bold"); doc.text("Cost breakdown", margin, y); y += 14;
   doc.setFont("helvetica","normal");
   doc.text("Pipe:", margin, y); doc.text(inr(cost_pipe), margin + 120, y); y += lineH;
   doc.text("Filter:", margin, y); doc.text(inr(cost_filter), margin + 120, y); y += lineH;
   doc.text("Pit / excavation:", margin, y); doc.text(inr(cost_pit), margin + 120, y); y += lineH;
-  if (cost_channel) { doc.text("Channel:", margin, y); doc.text(inr(cost_channel), margin + 120, y); y += lineH; }
   doc.setFont("helvetica","bold");
   doc.text("Total estimated installation cost:", margin, y); doc.text(inr(total_cost), margin + 240, y); y += lineH + 8;
 
@@ -776,3 +659,4 @@ async function generatePDF(reportData) {
     alert("PDF generation failed. See console for details.");
   }
 }
+
