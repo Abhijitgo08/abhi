@@ -293,7 +293,7 @@
 
         // Show overlay before asking geolocation permission
         // before asking permission (signup & login)
-        showBlockingOverlay('Please allow location access when prompted. We will securely fetch your location — this may take a few seconds.');
+        showBlockingOverlay('Please allow location access when prompted. We will securely obtain your location, which may take few moments...');
         trySaveLocationThenRedirect(data.token, 'dashboard.html');
       } else {
         alert(data.msg || 'Login failed');
