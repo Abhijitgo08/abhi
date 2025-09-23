@@ -1,330 +1,281 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="description" content="JalRakshak — AI-powered rainwater harvesting: rooftop analysis, cost estimates and rainfall prediction to help communities conserve water." />
-  <title>JalRakshak — Rainwater Harvesting</title>
-
-  <!-- Tailwind (for prototype) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JalRakshak - Rainwater Harvesting</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --emerald: #047857; /* used for accents elsewhere (buttons/text) */
-      --amber: #f59e0b;
+      --nav-h: 72px; /* change this value to match your navbar visual height */
     }
 
-    html,body { height: 100%; }
+    /* Reserve space for fixed navbar so it doesn't overlap page content */
     body {
-      margin:0;
-      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      color: #0f172a;
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding-top: var(--nav-h);
       background: url('back.jpeg') no-repeat center center fixed;
       background-size: cover;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-    }
-
-    h1,h2,h3,h4,h5 { font-family: "Poppins", sans-serif; }
-
-    /* translucent content boxes so text is readable on photo */
-    .overlay-box {
-      background: rgba(255,255,255,0.85);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      border-radius: 1rem;
-    }
-
-    /* nav + footer background (fallback) */
-    .nav-bg {
-      -webkit-backdrop-filter: blur(8px);
-      backdrop-filter: blur(8px);
-      background: rgba(15, 23, 42, 0.18);
-      border-radius: 0;
-    }
-
-    .focus-ring:focus {
-      outline: 3px solid rgba(6,95,70,0.24);
-      outline-offset: 2px;
-    }
-
-    /* helper for new navbar blur */
-    .backdrop-blur-nav {
-      -webkit-backdrop-filter: blur(8px);
-      backdrop-filter: blur(8px);
-    }
-
-    /* Mobile CTA helper */
-    .mobile-cta {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
+
+    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
+
+    nav {
+      min-height: var(--nav-h);
+      z-index: 60; /* ensure nav sits above hero */
+    }
+
+    .backdrop-blur-nav { 
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .hero-overlay { 
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+      border-radius: 1rem;
+      padding: 3rem;
+    }
+
+    /* mobile menu should appear directly below the nav */
+    #mobile-menu {
+      top: var(--nav-h);
+      z-index: 55;
+    }
+
+    /* remove hero negative margin and ensure predictable layout */
+    .hero-section-wrap { margin-top: 0; }
+
+    /* contact modal stacking */
+    #contactModal { z-index: 70; }
+
+    footer { z-index: 10; }
+
+    /* Optional: tweak nav height on small screens if your nav wraps */
+    @media (max-width: 640px) {
+      /* if your navbar becomes taller on mobile, increase this or adjust visually */
+      /* :root { --nav-h: 88px; } */
+    }
   </style>
 </head>
-<body class="antialiased">
+<body class="text-gray-900">
 
-  <!-- Skip link -->
-  <a class="sr-only focus:not-sr-only focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 p-2 m-2 rounded" href="#main">Skip to content</a>
+<!-- Navbar -->
+<nav class="fixed top-0 left-0 w-full flex items-center justify-between px-6 md:px-8 py-3 backdrop-blur-nav bg-gradient-to-r from-green-700/75 to-blue-600/65 shadow-md">
+  <a href="#" class="flex items-center space-x-3">
+    <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full shadow-lg">
+    <span class="text-2xl font-bold text-white">JalRakshak 1.0</span>
+  </a>
 
-  <!-- NAVBAR: subtle Eco-Aqua gradient -->
- <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between 
-     px-6 md:px-8 py-3 md:py-4 
-   bg-gradient-to-r from-white/30 via-teal-100/40 to-white/20 backdrop-blur-md
-
-
-     backdrop-blur-md shadow">
-  <!-- Navbar content -->
-
-    <a href="#" class="flex items-center space-x-3" aria-label="JalRakshak home">
-      <img src="LOGO.jpeg" alt="JalRakshak Logo" class="w-10 h-10 rounded-full shadow-lg">
-      <span class="text-2xl font-bold text-white select-none">JalRakshak 1.0</span>
-    </a>
-
-    <div class="hidden md:flex space-x-6 items-center px-4 py-2 rounded-full bg-white/10 shadow-lg">
-      <a href="#main" class="text-white hover:text-yellow-300 font-medium transition">Home</a>
-      <a href="#features" class="text-white hover:text-yellow-300 font-medium transition">Features</a>
-      <a href="#about" class="text-white hover:text-yellow-300 font-medium transition">About</a>
-      <a href="contact.html" class="text-white hover:text-yellow-300 font-medium transition">Contact</a>
-
-      <!-- GOVT SCHEMES = GREEN (button only; navbar itself has no green) -->
-      <a href="schemes.html" class="bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-md">
-        Govt Schemes
-      </a>
-
-      <!-- START NOW = AMBER -->
-      <a href="auth.html" class="bg-amber-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-amber-600 transition shadow-md">
-        Get Started
-      </a>
-    </div>
-
-    <!-- Mobile Button -->
-    <div class="md:hidden">
-      <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open menu"
-        class="text-white focus:outline-none p-2 rounded-md focus:ring-2 focus:ring-white/40">
-        <!-- animated icon (hamburger -> X) -->
-        <svg id="mobile-menu-icon" class="w-7 h-7 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path id="menu-line1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16"></path>
-          <path id="menu-line2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h16"></path>
-          <path id="menu-line3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 18h16"></path>
-        </svg>
-      </button>
-    </div>
-  </nav>
-
-  <!-- Mobile Menu: soft background; solid CTAs for contrast -->
-  <div id="mobile-menu" class="hidden md:hidden fixed top-16 inset-x-0 w-full bg-gradient-to-b from-sky-100/60 to-teal-200/60 backdrop-blur-sm text-center py-6 space-y-4 z-40">
-    <a href="#main" class="block text-slate-700 hover:text-emerald-700 font-medium transition">Home</a>
-    <a href="#features" class="block text-slate-700 hover:text-emerald-700 font-medium transition">Features</a>
-    <a href="#about" class="block text-slate-700 hover:text-emerald-700 font-medium transition">About</a>
-    <a href="contact.html" class="block text-slate-700 hover:text-emerald-700 font-medium transition">Contact</a>
-
-    <!-- GOVT SCHEMES: solid, distinct, with border & shadow -->
-    <a href="schemes.html"
-       class="mobile-cta block mx-auto w-3/4 px-5 py-2 rounded-full font-semibold text-white shadow-lg border border-white/10
-              bg-green-600 hover:bg-green-700 transition"
-       aria-label="Govt Schemes">
+  <div class="hidden md:flex space-x-6 items-center px-4 py-2 rounded-full bg-white/10 shadow-lg">
+    <a href="#" class="text-white hover:text-yellow-300 font-medium transition">Home</a>
+    <a href="#features" class="text-white hover:text-yellow-300 font-medium transition">Features</a>
+    <a href="#about" class="text-white hover:text-yellow-300 font-medium transition">About</a>
+    <a href="#contact" class="text-white hover:text-yellow-300 font-medium transition">Contact</a>
+    <a href="schemes.html" class="bg-yellow-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">
       Govt Schemes
     </a>
-
-    <!-- START NOW: solid amber, distinct, with border & shadow -->
-    <a href="auth.html"
-       class="mobile-cta block mx-auto w-3/4 px-5 py-2 rounded-full font-semibold text-white shadow-lg border border-white/10
-              bg-amber-500 hover:bg-amber-600 transition"
-       aria-label="Get Started">
+    <a href="auth.html" class="bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-md">
       Get Started
     </a>
   </div>
 
-  <!-- MAIN -->
-  <main id="main" class="pt-28 pb-28">
+  <!-- Mobile Button -->
+  <div class="md:hidden">
+    <button id="mobile-menu-button" aria-label="Toggle menu" class="text-white focus:outline-none">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
 
-    <!-- HERO -->
-    <section class="min-h-[70vh] flex items-center justify-center px-6">
-      <div class="overlay-box w-full max-w-4xl p-8 shadow-xl text-center">
-        <h1 class="text-4xl md:text-6xl font-bold text-emerald-700 leading-tight">
-          Nurture the Drop,<br />Grow a Greener Tomorrow 🌿
-        </h1>
-        <p class="mt-4 text-lg text-gray-700">
-          AI-powered platform to calculate rooftop capacity, estimate costs & predict rainfall for sustainable rainwater harvesting.
-        </p>
-        <div class="mt-6 flex flex-wrap gap-3 justify-center">
-          <!-- START NOW = AMBER -->
-          <a href="auth.html" class="bg-amber-500 text-white px-6 py-3 rounded-full font-semibold hover:bg-amber-600">Start Now</a>
-          <!-- GOVT SCHEMES = GREEN -->
-          <a href="schemes.html" class="bg-green-600 text-white px-6 py-3 rounded-full font-semibold hover:bg-green-700">Govt Schemes</a>
-          <a href="#about" class="bg-sky-600 text-white px-6 py-3 rounded-full font-semibold hover:bg-sky-700">Learn More</a>
-        </div>
+<!-- Mobile Menu -->
+<div id="mobile-menu" class="hidden fixed right-0 w-full bg-gradient-to-b from-green-800/95 to-blue-700/95 text-center py-6 space-y-4">
+  <a href="#" class="block text-white hover:text-yellow-300">Home</a>
+  <a href="#features" class="block text-white hover:text-yellow-300">Features</a>
+  <a href="#about" class="block text-white hover:text-yellow-300">About</a>
+  <a href="#contact" class="block text-white hover:text-yellow-300">Contact</a>
+  <a href="schemes.html" class="block mx-auto w-3/4 bg-yellow-500 text-white px-5 py-2 rounded-full font-semibold hover:bg-yellow-600 transition shadow-md">
+    Govt Schemes
+  </a>
+  <a href="auth.html" class="block mx-auto w-3/4 bg-green-600 text-white px-5 py-2 rounded-full font-semibold hover:bg-green-700 transition shadow-md">
+    Get Started
+  </a>
+</div>
+
+<!-- Hero Section -->
+<section id="home" class="hero-section-wrap h-screen flex items-center justify-center relative">
+  <div class="text-center px-6 md:px-12 w-full max-w-4xl hero-overlay shadow-2xl rounded-3xl border border-emerald-200">
+    <h1 class="text-4xl md:text-6xl font-bold text-emerald-700 leading-tight drop-shadow-md">
+      Nurture the Drop,<br /> Grow a Greener Tomorrow 🌿
+    </h1>
+    <p class="mt-6 text-lg md:text-xl text-gray-700 font-medium">
+      AI-powered platform to calculate rooftop capacity, estimate costs & predict rainfall for sustainable rainwater harvesting.
+    </p>
+    <div class="mt-8 flex justify-center space-x-4 flex-wrap gap-4">
+      <a href="auth.html" class="bg-emerald-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:bg-emerald-700 transition shadow-lg">
+        Start Now
+      </a>
+      <a href="schemes.html" class="bg-amber-500 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-amber-600 transition">
+        Govt Schemes
+      </a>
+      <a href="#about" class="bg-sky-600 text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:bg-sky-700 transition">
+        Learn More
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features" class="py-20 bg-green-50/80">
+  <div class="container mx-auto px-6">
+    <h2 class="text-4xl font-bold text-center text-green-800">Key Features</h2>
+    <div class="mt-12 grid md:grid-cols-3 gap-10 text-center">
+      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="Rooftop Analysis Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">AI Rooftop Analysis</h3>
+        <p class="text-gray-700 mt-2">Upload a photo and let AI calculate your rooftop area and slope for maximum collection.</p>
       </div>
-    </section>
-
-    <!-- FEATURES -->
-    <section id="features" class="py-12 px-6 mt-8">
-      <div class="overlay-box max-w-6xl mx-auto p-8 shadow-lg">
-        <h2 class="text-3xl md:text-4xl font-bold text-emerald-800 text-center">Key Features</h2>
-        <div class="mt-8 grid gap-8 grid-cols-1 md:grid-cols-3">
-          <article class="p-6 bg-white/80 rounded-xl shadow hover:shadow-lg transition">
-            <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="" class="w-14 h-14 mx-auto" loading="lazy">
-            <h3 class="mt-4 text-lg font-semibold text-emerald-700">AI Rooftop Analysis</h3>
-            <p class="mt-2 text-gray-600">Upload a photo and AI computes rooftop area & slope for maximum collection.</p>
-          </article>
-          <article class="p-6 bg-white/80 rounded-xl shadow hover:shadow-lg transition">
-            <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="" class="w-14 h-14 mx-auto" loading="lazy">
-            <h3 class="mt-4 text-lg font-semibold text-emerald-700">Instant Cost Estimation</h3>
-            <p class="mt-2 text-gray-600">Get transparent cost breakdown for tanks, pipes & fittings customized to your home.</p>
-          </article>
-          <article class="p-6 bg-white/80 rounded-xl shadow hover:shadow-lg transition">
-            <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="" class="w-14 h-14 mx-auto" loading="lazy">
-            <h3 class="mt-4 text-lg font-semibold text-emerald-700">Smart Water Forecast</h3>
-            <p class="mt-2 text-gray-600">Uses local rainfall data to predict water savings and break-even points.</p>
-          </article>
-        </div>
+      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/1903/1903162.png" alt="Cost Estimation Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">Instant Cost Estimation</h3>
+        <p class="text-gray-700 mt-2">Get a transparent cost breakdown for tanks, pipes, and fittings customized for your home.</p>
       </div>
-    </section>
-
-    <!-- ABOUT -->
-    <section id="about" class="py-12 px-6 mt-8">
-      <div class="overlay-box max-w-6xl mx-auto p-8 shadow-lg text-center">
-        <h2 class="text-3xl font-bold text-emerald-800">About Our Mission</h2>
-        <p class="mt-6 text-gray-800 leading-relaxed">
-          JalRakshak is built on a mission to combat water scarcity and promote sustainability.
-        </p>
-        <p>
-          We believe technology empowers communities to make a tangible impact — one drop at a time.
-         </p>
-      </div>
-    </section>
-
-    <!-- Contact modal -->
-    <div id="contactModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div class="overlay-box p-8 w-full max-w-xl relative shadow-2xl">
-        <button id="closeContact" class="absolute top-3 right-3 text-gray-600 hover:text-red-600 text-2xl" aria-label="Close">&times;</button>
-        <h2 class="text-2xl font-bold text-emerald-700 text-center">Get In Touch</h2>
-        <p class="mt-3 text-gray-700 text-center">Have questions or want to partner with us? Fill the form below.</p>
-        <form action="#" method="POST" class="mt-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500" required>
-            <input type="email" placeholder="Your Email" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500" required>
-          </div>
-          <textarea placeholder="Your Message" rows="4" class="w-full mt-4 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500" required></textarea>
-          <button type="submit" class="w-full mt-4 bg-amber-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-600">Send Message</button>
-        </form>
+      <div class="p-8 bg-white/70 rounded-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition">
+        <img src="https://cdn-icons-png.flaticon.com/512/553/553416.png" alt="Rain Prediction Icon" class="w-16 h-16 mx-auto" />
+        <h3 class="mt-4 text-2xl font-semibold text-green-700">Smart Water Forecast</h3>
+        <p class="text-gray-700 mt-2">Uses local rainfall data to predict your annual water savings and break-even point.</p>
       </div>
     </div>
-  </main>
+  </div>
+</section>
 
-  <!-- FOOTER -->
-  <footer class="w-full nav-bg text-white mt-8">
-    <div class="max-w-6xl mx-auto px-6 md:px-12 py-10 grid grid-cols-1 md:grid-cols-3 gap-8">
-      <!-- Brand -->
-      <div>
-        <h2 class="text-2xl font-bold">JalRakshak</h2>
-        <p class="mt-3 text-gray-200 text-sm leading-relaxed">
-          Empowering communities to conserve water and promote sustainability with AI-driven rainwater harvesting solutions.
-        </p>
+<!-- About -->
+<section id="about" class="py-20 bg-green-100/90">
+  <div class="container mx-auto px-6 text-center">
+    <h2 class="text-4xl font-bold text-green-800">About Our Mission</h2>
+    <p class="mt-6 max-w-3xl mx-auto text-gray-800 text-lg leading-relaxed bg-white/70 p-6 rounded-xl shadow-md">
+      JalRakshak is built on a mission to combat water scarcity and promote environmental sustainability. 
+      We believe that technology can empower communities to make a tangible impact — one drop at a time.
+    </p>
+  </div>
+</section>
+
+<!-- Contact Modal -->
+<div id="contactModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center">
+  <div class="bg-white/95 rounded-xl shadow-2xl p-8 w-full max-w-xl relative">
+    <button id="closeContact" class="absolute top-3 right-3 text-gray-600 hover:text-red-600 text-2xl">&times;</button>
+    <h2 class="text-3xl font-bold text-green-800 text-center">Get In Touch</h2>
+    <p class="mt-4 text-gray-700 text-center">Have questions or want to partner with us? Fill the form below.</p>
+    <form action="#" method="POST" class="mt-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <input type="text" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none">
+        <input type="email" placeholder="Your Email" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none">
       </div>
-      <!-- Quick Links -->
-      <div>
-        <h3 class="text-lg font-semibold mb-3">Quick Links</h3>
-        <ul class="space-y-2 text-gray-200">
-          <li><a href="#main" class="hover:text-amber-300">Home</a></li>
-          <li><a href="#features" class="hover:text-amber-300">Features</a></li>
-          <li><a href="#about" class="hover:text-amber-300">About</a></li>
-          <li><a href="schemes.html" class="hover:text-amber-300">Govt Schemes</a></li>
-          <li><a href="contact.html" class="hover:text-amber-300">Contact</a></li>
-        </ul>
-      </div>
-      <!-- Social -->
-      <div>
-        <h3 class="text-lg font-semibold mb-3">Connect with Us</h3>
-        <p class="mt-3 text-gray-200 text-sm leading-relaxed">AbhijitG825@gmail.com</p>
+      <textarea placeholder="Your Message" rows="5" class="w-full mt-6 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-600 outline-none"></textarea>
+      <button type="submit" class="w-full mt-6 bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition shadow-md">
+        Send Message
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer class="bg-gray-900 text-gray-300 pt-12">
+  <div class="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 md:grid-cols-3 gap-10">
+    <div>
+      <h2 class="text-2xl font-bold text-white">JalRakshak</h2>
+      <p class="mt-3 text-gray-400 text-sm leading-relaxed">
+        Empowering communities to conserve water and promote sustainability
+        with AI-driven rainwater harvesting solutions.
+      </p>
+    </div>
+    <div>
+      <h3 class="text-lg font-semibold text-white mb-3">Quick Links</h3>
+      <ul class="space-y-2 text-gray-400">
+        <li><a href="#" class="hover:text-green-400 transition">Home</a></li>
+        <li><a href="#features" class="hover:text-green-400 transition">Features</a></li>
+        <li><a href="#about" class="hover:text-green-400 transition">About</a></li>
+        <li><a href="schemes.html" class="hover:text-green-400 transition">Govt Schemes</a></li>
+        <li><a href="#contact" class="hover:text-green-400 transition">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <h3 class="text-lg font-semibold text-white mb-3">Connect with Us </h3>
+      <p class="mt-3 text-gray-400 text-sm leading-relaxed">teamjalrkashak@gmail.com</p>
+      <div class="flex space-x-4 mt-4">
+        <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="LinkedIn">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19 0h-14c-2.761..."></path>
+          </svg>
+        </a>
+        <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="Twitter">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M24 4.557c-0.883..."></path>
+          </svg>
+        </a>
+        <a href="#" class="text-gray-400 hover:text-green-400 transition" aria-label="GitHub">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 .297c-6.63 0..."></path>
+          </svg>
+        </a>
       </div>
     </div>
-    <div class="border-t border-white/20 py-4 text-center text-sm text-gray-200">
-      <span id="year"></span> Team JalRakshak1.0
-    </div>
-  </footer>
+  </div>
 
-  <!-- JS: navbar toggle + mobile icon animation, modal controls, year -->
-  <script>
-    // Year in footer
-    const yearEl = document.getElementById("year");
-    if (yearEl) yearEl.textContent = new Date().getFullYear();
+  <div class="mt-10 border-t border-gray-700 py-6 text-center text-gray-400 text-sm">
+    <p>2025 Team JalRakshak_1.0</p>
+  </div>
+</footer>
 
-    (function () {
-      const btn = document.getElementById('mobile-menu-button');
-      const menu = document.getElementById('mobile-menu');
-      const icon = document.getElementById('mobile-menu-icon');
+<!-- Inline JS (mobile menu + contact modal) -->
+<script>
+  // Mobile menu toggle
+  const mobileBtn = document.getElementById('mobile-menu-button');
+  const mobileMenu = document.getElementById('mobile-menu');
+  mobileBtn && mobileBtn.addEventListener('click', () => {
+    if (!mobileMenu) return;
+    mobileMenu.classList.toggle('hidden');
+  });
 
-      function setExpanded(val) {
-        if (btn) btn.setAttribute('aria-expanded', String(val));
-      }
+  // Contact modal handlers
+  const contactModal = document.getElementById('contactModal');
+  const closeContact = document.getElementById('closeContact');
 
-      function openMenu() {
-        if (!menu) return;
-        menu.classList.remove('hidden');
-        setExpanded(true);
-        // animate icon -> transform three lines into an X
-        if (icon) {
-          const l1 = icon.querySelector('#menu-line1');
-          const l2 = icon.querySelector('#menu-line2');
-          const l3 = icon.querySelector('#menu-line3');
-          if (l1) l1.setAttribute('d', 'M6 6 L18 18');
-          if (l2) l2.style.opacity = '0';
-          if (l3) l3.setAttribute('d', 'M6 18 L18 6');
-        }
-      }
+  // Open modal when clicking "Contact" links
+  document.querySelectorAll('a[href="#contact"], a[href="#contact"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      contactModal && contactModal.classList.remove('hidden');
+    });
+  });
 
-      function closeMenu() {
-        if (!menu) return;
-        menu.classList.add('hidden');
-        setExpanded(false);
-        if (icon) {
-          const l1 = icon.querySelector('#menu-line1');
-          const l2 = icon.querySelector('#menu-line2');
-          const l3 = icon.querySelector('#menu-line3');
-          if (l1) l1.setAttribute('d', 'M4 6h16');
-          if (l2) l2.style.opacity = '1';
-          if (l3) l3.setAttribute('d', 'M4 18h16');
-        }
-      }
+  // Also open when clicking desktop "Contact" (the one pointing to #contact or contact.html)
+  document.querySelectorAll('a[href="contact.html"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      contactModal && contactModal.classList.remove('hidden');
+    });
+  });
 
-      if (btn) {
-        btn.addEventListener('click', () => {
-          const opened = btn.getAttribute('aria-expanded') === 'true';
-          opened ? closeMenu() : openMenu();
-        });
-      }
+  closeContact && closeContact.addEventListener('click', () => {
+    contactModal && contactModal.classList.add('hidden');
+  });
 
-      // Close on ESC
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeMenu();
-      });
+  // Close modal by clicking backdrop
+  contactModal && contactModal.addEventListener('click', (e) => {
+    if (e.target === contactModal) contactModal.classList.add('hidden');
+  });
 
-      // Close when clicking outside the menu or button (mobile)
-      document.addEventListener('click', (e) => {
-        if (!menu) return;
-        const isClickInside = menu.contains(e.target) || (btn && btn.contains(e.target));
-        if (!menu.classList.contains('hidden') && !isClickInside) {
-          closeMenu();
-        }
-      });
-
-      // Close when a mobile link is clicked
-      if (menu) {
-        menu.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
-      }
-    })();
-
-    // Contact modal open/close (close button)
-    const modal = document.getElementById("contactModal");
-    const closeBtn = document.getElementById("closeContact");
-    if (closeBtn && modal) {
-      closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-    }
-  </script>
+  // Close mobile menu when clicking a link inside it
+  mobileMenu && mobileMenu.addEventListener('click', (e) => {
+    if (e.target && e.target.tagName === 'A') mobileMenu.classList.add('hidden');
+  });
+</script>
 </body>
 </html>
