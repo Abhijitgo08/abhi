@@ -108,18 +108,62 @@
         <p class="mt-2 text-xs text-gray-600">If enabled: draw a ground polygon and pick surface types.</p>
 
         <label class="block mt-4 text-sm font-medium text-gray-700">Open-space Surface Types (choose one or more)</label>
-        <select id="groundSurfaceSelect" multiple size="6" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
-          <option value="water_tight">Water-tight / Very Impervious (≈ 0.70–0.95)</option>
-          <option value="asphalt">Asphalt pavement (≈ 0.85–0.90)</option>
-          <option value="stone_brick">Stone / brick with tight joints (≈ 0.75–0.85)</option>
-          <option value="open_joints">Stone / brick — open joints (≈ 0.50–0.70)</option>
-          <option value="inferior_blocks">Inferior block pavements (≈ 0.40–0.50)</option>
-          <option value="macadam">Macadamized roadways (≈ 0.25–0.60)</option>
-          <option value="gravel">Gravel roads / walks (≈ 0.15–0.30)</option>
-          <option value="unpaved">Unpaved / vacant lot (≈ 0.10–0.30)</option>
-          <option value="parks">Parks / lawns / meadows (≈ 0.05–0.25)</option>
-          <option value="dense_built">Dense built-up surfaces (≈ 0.70–0.90)</option>
-        </select>
+        <label class="block mt-4 text-sm font-medium text-gray-700">Open-space Surface Types (choose one or more)</label>
+
+<div id="groundSurfaceTiles" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+  <!-- Impervious -->
+  <label class="surface-tile flex items-center justify-between p-3 rounded border bg-white/80 cursor-pointer select-none" data-val="water_tight">
+    <div>
+      <div class="font-medium">Water-tight / Paved</div>
+      <div class="text-xs text-gray-600">≈ 0.70–0.95</div>
+    </div>
+    <input type="checkbox" name="groundSurface" value="water_tight" class="sr-only">
+    <div class="check-box w-6 h-6 rounded border-2 flex items-center justify-center"></div>
+  </label>
+
+  <!-- Asphalt -->
+  <label class="surface-tile flex items-center justify-between p-3 rounded border bg-white/80 cursor-pointer select-none" data-val="asphalt">
+    <div>
+      <div class="font-medium">Asphalt pavement</div>
+      <div class="text-xs text-gray-600">≈ 0.85–0.90</div>
+    </div>
+    <input type="checkbox" name="groundSurface" value="asphalt" class="sr-only">
+    <div class="check-box w-6 h-6 rounded border-2 flex items-center justify-center"></div>
+  </label>
+
+  <!-- Stone / Brick (open joints) -->
+  <label class="surface-tile flex items-center justify-between p-3 rounded border bg-white/80 cursor-pointer select-none" data-val="open_joints">
+    <div>
+      <div class="font-medium">Stone / brick (open joints)</div>
+      <div class="text-xs text-gray-600">≈ 0.50–0.70</div>
+    </div>
+    <input type="checkbox" name="groundSurface" value="open_joints" class="sr-only">
+    <div class="check-box w-6 h-6 rounded border-2 flex items-center justify-center"></div>
+  </label>
+
+  <!-- Unpaved -->
+  <label class="surface-tile flex items-center justify-between p-3 rounded border bg-white/80 cursor-pointer select-none" data-val="unpaved">
+    <div>
+      <div class="font-medium">Unpaved / vacant lot</div>
+      <div class="text-xs text-gray-600">≈ 0.10–0.30</div>
+    </div>
+    <input type="checkbox" name="groundSurface" value="unpaved" class="sr-only">
+    <div class="check-box w-6 h-6 rounded border-2 flex items-center justify-center"></div>
+  </label>
+
+  <!-- Parks / Lawns -->
+  <label class="surface-tile flex items-center justify-between p-3 rounded border bg-white/80 cursor-pointer select-none" data-val="parks">
+    <div>
+      <div class="font-medium">Parks / lawns / meadows</div>
+      <div class="text-xs text-gray-600">≈ 0.05–0.25</div>
+    </div>
+    <input type="checkbox" name="groundSurface" value="parks" class="sr-only">
+    <div class="check-box w-6 h-6 rounded border-2 flex items-center justify-center"></div>
+  </label>
+</div>
+
+<!-- keep your CSS + JS toggle from earlier -->
+
       </div>
     </div>
   </section>
