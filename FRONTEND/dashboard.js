@@ -14,13 +14,15 @@ const groundAreaWrap = document.getElementById("groundAreaWrap");
 const locationSelect = document.getElementById("locationSelect");
 const locationMeta = document.getElementById("locationMeta");
 const includeOpenSpaceCheckbox = document.getElementById("includeOpenSpace");
-const groundSurfaceSelect = document.getElementById("groundSurfaceSelect");
+const groundSurfaceContainer = document.getElementById("groundSurfaceContainer");
+const basemapName = document.getElementById("basemapName");
 
 // ===== CONFIG =====
 const API_BASE = (location.hostname === 'localhost') ? 'http://localhost:10000' : '';
 const token = localStorage.getItem("token");
 if (!token) {
-  window.location.href = "auth.html";
+  // If your app requires login, uncomment the next line:
+  // window.location.href = "auth.html";
 }
 userName.textContent = localStorage.getItem("userName") || "User";
 
@@ -29,17 +31,19 @@ const DEFAULTS = {
   avgFloorHeight: 3.0,
   velocity_m_s: 2.5,
   wetMonths: 4,
-  safetyFactorFilter: 1.5, // <-- conservative fixed safety factor
+  safetyFactorFilter: 1.5, // conservative by default (you requested high safety)
   pit_cost_per_m3: 800
 };
 
 // ----------------- MAP SETUP -----------------
 const map = L.map("map").setView([18.5204, 73.8567], 13);
 
+// base layers
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
   maxZoom: 19
-});
+}).addTo(map);
+
 const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
   attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
   maxNativeZoom: 17,
@@ -50,13 +54,49 @@ const esriLabels = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/se
   maxNativeZoom: 17,
   maxZoom: 20
 });
-osm.addTo(map);
 
-// Draw group
+// convenience group so we can treat satellite + labels together
+const satGroup = L.layerGroup([esriSat, esriLabels]);
+
+// add layer control so user can also switch manually
+const baseMaps = { "OpenStreetMap": osm, "Satellite": satGroup };
+L.control.layers(baseMaps, null, { collapsed: false }).addTo(map);
+
+function updateBasemapLabel() {
+  if (map.hasLayer(esriSat) || map.hasLayer(esriLabels) || map.hasLayer(satGroup)) {
+    basemapName && (basemapName.textContent = "Satellite");
+  } else {
+    basemapName && (basemapName.textContent = "OpenStreetMap");
+  }
+}
+map.on('baselayerchange', updateBasemapLabel);
+updateBasemapLabel();
+
+// auto-switch by zoom (reintroduced)
+map.on('zoomend', () => {
+  const z = map.getZoom();
+  if (z >= 14) {
+    // show satellite
+    if (!map.hasLayer(esriSat)) {
+      if (map.hasLayer(osm)) map.removeLayer(osm);
+      if (!map.hasLayer(esriSat)) esriSat.addTo(map);
+      if (!map.hasLayer(esriLabels)) esriLabels.addTo(map);
+    }
+  } else {
+    // show osm
+    if (!map.hasLayer(osm)) {
+      if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
+      if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
+      if (!map.hasLayer(osm)) osm.addTo(map);
+    }
+  }
+  updateBasemapLabel();
+});
+
+// ----------------- DRAW SETUP -----------------
 const drawnGroup = new L.FeatureGroup();
 map.addLayer(drawnGroup);
 
-// We'll use dynamic draw control so shapeOptions can change when drawing roof vs ground
 let drawControl = null;
 function styleRoofShape() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.22 }; }
 function styleGroundShape() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.22 }; }
@@ -76,9 +116,9 @@ function installDrawControl(isGround) {
   });
   map.addControl(drawControl);
 }
-installDrawControl(false); // start for roof drawing
+installDrawControl(false); // start drawing roofs by default
 
-// turf helper
+// ----------------- TURF / GEOM HELPERS -----------------
 function latlngsToTurfPolygon(latlngs) {
   const coords = latlngs.map((p) => [p.lng, p.lat]);
   if (coords.length && (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])) {
@@ -87,7 +127,6 @@ function latlngsToTurfPolygon(latlngs) {
   return turf.polygon([coords]);
 }
 
-// helper area calc (returns m^2)
 function calculateAreaOfLayer(layer) {
   try {
     const latlngs = layer.getLatLngs ? layer.getLatLngs()[0] : null;
@@ -107,17 +146,18 @@ function calculateAreaOfLayer(layer) {
   }
 }
 
-// track roof/ground layers
+// ----------------- TRACK ROOF / GROUND -----------------
 let roofLayer = null;
 let groundLayer = null;
 
-function styleForRoof() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.22 }; }
-function styleForGround() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.22 }; }
+function styleForRoof() { return styleRoofShape(); }
+function styleForGround() { return styleGroundShape(); }
 
 map.on(L.Draw.Event.CREATED, (e) => {
   const layer = e.layer;
   const includeGround = !!includeOpenSpaceCheckbox?.checked;
   if (!includeGround) {
+    // single polygon mode -> roof only
     if (roofLayer) drawnGroup.removeLayer(roofLayer);
     if (groundLayer) { drawnGroup.removeLayer(groundLayer); groundLayer = null; }
     roofLayer = layer;
@@ -125,25 +165,25 @@ map.on(L.Draw.Event.CREATED, (e) => {
     drawnGroup.addLayer(layer);
     installDrawControl(false);
   } else {
+    // two polygon mode: first -> roof, second -> ground
     if (!roofLayer) {
       roofLayer = layer;
       if (layer.setStyle) layer.setStyle(styleForRoof());
       drawnGroup.addLayer(layer);
-      // after roof drawn, switch draw tool to ground style
+      // after roof drawn, set tool to draw ground (orange) for the next polygon
       installDrawControl(true);
     } else {
       if (groundLayer) drawnGroup.removeLayer(groundLayer);
       groundLayer = layer;
       if (layer.setStyle) layer.setStyle(styleForGround());
       drawnGroup.addLayer(layer);
-      // keep drawing for replacements - keep ground style
-      installDrawControl(true);
+      installDrawControl(true); // keep ground style so replacement continues to look the same while drawing
     }
   }
   updateAreaDisplays();
 });
 
-map.on(L.Draw.Event.EDITED, (e) => updateAreaDisplays());
+map.on(L.Draw.Event.EDITED, () => updateAreaDisplays());
 map.on(L.Draw.Event.DELETED, (e) => {
   e.layers.eachLayer((ly) => {
     if (roofLayer && ly === roofLayer) roofLayer = null;
@@ -167,7 +207,7 @@ function updateAreaDisplays() {
   }
 }
 
-// when toggling includeOpenSpace, adjust draw control and layers
+// when toggling includeOpenSpace, remove ground polygon if disabled, adjust draw tool
 includeOpenSpaceCheckbox?.addEventListener('change', (e) => {
   if (!includeOpenSpaceCheckbox.checked) {
     if (groundLayer) {
@@ -177,14 +217,13 @@ includeOpenSpaceCheckbox?.addEventListener('change', (e) => {
     installDrawControl(false);
     updateAreaDisplays();
   } else {
-    // user enabled ground drawing — if roof exists, switch to ground style
+    // tip user to draw roof then ground
+    showInlineTip("Open-space enabled: draw roof first (blue), then draw ground (orange).");
+    // if a roof exists, switch to ground drawing so user can add the ground polygon next
     if (roofLayer) installDrawControl(true);
-    // show nicer tip (non-blocking)
-    showInlineTip("Open-space enabled: draw roof first, then draw ground (orange).");
   }
 });
 
-// small inline tip function
 function showInlineTip(msg, ttl = 4500) {
   const tip = document.createElement('div');
   tip.className = "fixed bottom-6 right-6 bg-white/95 p-3 rounded shadow-lg z-50";
@@ -193,7 +232,25 @@ function showInlineTip(msg, ttl = 4500) {
   setTimeout(() => tip.remove(), ttl);
 }
 
-// ----------------- LOCATION helpers -----------------
+// ----------------- GROUND SURFACE CHECKBOX HELPERS -----------------
+// if your HTML already contains the checkboxes (as provided earlier) this simply reads them;
+// otherwise you can dynamically populate them here.
+const GROUND_IMPERMEABILITY = {
+  water_tight: 0.825, asphalt: 0.875, stone_brick: 0.8, open_joints: 0.6,
+  inferior_blocks: 0.45, macadam: 0.425, gravel: 0.225, unpaved: 0.2, parks: 0.15, dense_built: 0.8
+};
+
+function getGroundSelectionsFromCheckboxes() {
+  const selectedKeys = [];
+  if (!groundSurfaceContainer) return selectedKeys;
+  const inputs = groundSurfaceContainer.querySelectorAll("input[type=checkbox][data-key]");
+  inputs.forEach((cb) => {
+    if (cb.checked && cb.dataset && cb.dataset.key) selectedKeys.push(cb.dataset.key);
+  });
+  return selectedKeys;
+}
+
+// ----------------- LOCATION helpers (same robust loader from earlier) -----------------
 function showLocationMeta(loc) {
   if (!locationMeta) return;
   if (!loc) {
@@ -340,13 +397,6 @@ if (locationSelect) {
 loadLocationOptions();
 
 // ----------------- ANALYSIS (call backend) -----------------
-
-// mapping of ground surface option keys to impermeability midpoints
-const GROUND_IMPERMEABILITY = {
-  water_tight: 0.825, asphalt: 0.875, stone_brick: 0.8, open_joints: 0.6,
-  inferior_blocks: 0.45, macadam: 0.425, gravel: 0.225, unpaved: 0.2, parks: 0.15, dense_built: 0.8
-};
-
 analyzeBtn.addEventListener("click", async () => {
   const roofArea = window.selectedRoofArea || 0;
   const groundArea = window.selectedGroundArea || 0;
@@ -406,42 +456,37 @@ analyzeBtn.addEventListener("click", async () => {
   const soilEl = document.getElementById("soilType");
   const soilType = soilEl ? (soilEl.value || null) : null;
 
-  // ground surface selections (multiple)
-  const groundSelections = [];
-  if (includeGround && groundSurfaceSelect) {
-    for (let i = 0; i < groundSurfaceSelect.options.length; i++) {
-      const o = groundSurfaceSelect.options[i];
-      if (o.selected) groundSelections.push(o.value);
-    }
-    if (groundSelections.length === 0) {
-      alert("Please select at least one surface type for the open-space area (so we can compute runoff coefficient).");
+  // read selected ground surfaces from the checkbox container
+  const groundSelections = includeGround ? getGroundSelectionsFromCheckboxes() : [];
+
+  if (includeGround && groundSelections.length === 0 && groundArea > 0) {
+    // if user drew ground but didn't pick surfaces, ask them
+    const any = confirm("You drew an open-space polygon but didn't select any surface types. Use default medium imperviousness?");
+    if (!any) {
+      analysisResult.innerHTML = `<p class="text-red-600">❌ Please select at least one surface type for the ground area.</p>`;
       return;
     }
   }
 
-  // validate required
+  // validation (backend expects lat, lng, roofArea, roofType, dwellers, floors)
   if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers) || isNaN(floors)) {
     analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers, floors</p>`;
     console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers, floors });
     return;
   }
 
-  // compute groundRunoffCoeff (average of selected)
+  // compute effective ground runoff coefficient (average of selected)
   let groundRunoffCoeff = null;
-  if (includeGround) {
+  if (includeGround && groundSelections.length > 0) {
     const vals = groundSelections.map(k => (GROUND_IMPERMEABILITY[k] ?? null)).filter(v => v !== null);
-    if (vals.length > 0) {
-      groundRunoffCoeff = vals.reduce((a,b) => a + b, 0) / vals.length;
-    } else {
-      groundRunoffCoeff = 0.3;
-    }
+    if (vals.length > 0) groundRunoffCoeff = vals.reduce((a,b) => a + b, 0) / vals.length;
   }
 
-  // polygons to arrays
+  // polygons to arrays of coords
   const roofPolygon = (roofLayer && typeof roofLayer.getLatLngs === 'function') ? roofLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
   const groundPolygon = (groundLayer && typeof groundLayer.getLatLngs === 'function') ? groundLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
 
-  // payload always sends safetyFactorFilter (conservative)
+  // payload
   const payload = {
     lat, lng, roofArea, roofType, dwellers, floors,
     avgFloorHeight: DEFAULTS.avgFloorHeight,
@@ -471,7 +516,7 @@ analyzeBtn.addEventListener("click", async () => {
       return;
     }
 
-    // normalize server response
+    // normalize server response keys
     const litersPerYear = data.runoff_liters_per_year ?? data.litersPerYear ?? data.runoff ?? 0;
     const estimatedCost = data.costs?.total_estimated_installation_cost ?? data.estimatedCost ?? data.cost ?? 0;
     const suffMonths = data.sufficiencyMonths ?? data.sufficiency_months ?? data.sufficiency ?? null;
@@ -629,8 +674,8 @@ async function generatePDF(reportData) {
 
   const rainfall_mm = reportData.rainfall_mm ?? safe(server, "rainfall_mm") ?? safe(server, "rainfall") ?? "N/A";
   const runoff_lpy = safe(server, "runoff_liters_per_year", safe(server, "litersPerYear", safe(server, "runoff", 0)));
-  const runoff_roof_lpy = safe(server, "runoff_roof_liters_per_year", null);
-  const runoff_ground_lpy = safe(server, "runoff_ground_liters_per_year", null);
+  const runoff_roof_lpy = safe(server, "runoff_roof_liters_per_year", safe(server, "runoff_roof_liters_per_year", null));
+  const runoff_ground_lpy = safe(server, "runoff_ground_liters_per_year", safe(server, "runoff_ground_liters_per_year", null));
   const infiltrated_lpy = safe(server, "infiltrated_liters_per_year", null);
   const annualNeed_L = safe(server, "annualNeed", Math.round((dwellers || 0) * 85 * 365));
   const coverageRatio = safe(server, "coverageRatio", (annualNeed_L && runoff_lpy) ? (runoff_lpy / annualNeed_L) : null);
@@ -772,4 +817,17 @@ async function generatePDF(reportData) {
     console.error("Failed to save PDF:", err);
     alert("PDF generation failed. See console for details.");
   }
+}
+
+// ----------------- Small utility for reading older ground-surface SELECT (if present) --------------
+// (Some earlier versions used a <select multiple> element named groundSurfaceSelect — we prefer checkboxes.)
+// This helper lets code remain compatible if you still have that element.
+function readGroundSurfaceSelectLegacy() {
+  const sel = document.getElementById("groundSurfaceSelect");
+  if (!sel) return [];
+  const arr = [];
+  for (let i=0;i<sel.options.length;i++){
+    if (sel.options[i].selected) arr.push(sel.options[i].value);
+  }
+  return arr;
 }
