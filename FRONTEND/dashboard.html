@@ -12,46 +12,173 @@
   <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
   <style>
-    body { font-family: 'Inter', sans-serif; background: url('back.jpeg') no-repeat center center fixed; background-size: cover; }
-    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
-    #map { height: 400px; border-radius: 12px; }
-    .tip-box { background: rgba(255,255,255,0.92); border-radius: 10px; padding: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
-    .modal-backdrop { position: fixed; inset:0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:50; }
-    .modal { width: min(780px, 94%); background: white; border-radius: 10px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+  /* ----- Base layout & fonts ----- */
+  :root{
+    --glass-bg: rgba(255,255,255,0.40);
+    --panel-bg: rgba(255,255,255,0.92);
+    --muted: #6b7280;
+    --accent-green: #16a34a;
+    --card-radius: 12px;
+    --shadow-1: 0 6px 18px rgba(0,0,0,0.08);
+    --shadow-2: 0 8px 30px rgba(0,0,0,0.12);
+  }
 
-    /* Dropdown checkbox list styles */
-    .surface-dropdown { position: relative; display: inline-block; width: 100%; }
-    .surface-dropdown-btn {
-      width: 100%;
-      text-align: left;
-      background: white;
-      border: 1px solid #e5e7eb;
-      padding: 0.5rem 0.75rem;
-      border-radius: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-    }
-    .surface-dropdown-menu {
-      position: absolute;
-      z-index: 60;
-      left: 0; right: 0;
-      background: white;
-      border: 1px solid rgba(0,0,0,0.08);
-      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-      border-radius: 8px;
-      margin-top: 6px;
-      padding: 8px;
-      max-height: 260px;
-      overflow: auto;
-    }
-    .surface-item { display:flex; align-items:center; gap:10px; padding:8px; border-radius:6px; cursor:pointer; }
-    .surface-item:hover { background: rgba(0,0,0,0.03); }
-    .surface-item input[type="checkbox"] { width:16px; height:16px; margin:0; }
-    .surface-item .label { font-size:13px; }
-    .surface-note { font-size:12px; color:#6b7280; margin-top:6px; }
-  </style>
+  html,body{
+    height:100%;
+    margin:0;
+    padding:0;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: url('back.jpeg') no-repeat center center fixed;
+    background-size: cover;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    color: #111827;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  h1,h2,h3{ font-family: 'Poppins', sans-serif; }
+
+  /* ----- Navbar ----- */
+  nav {
+    z-index: 10050; /* keep navbar above everything */
+  }
+  nav img { object-fit:cover; }
+
+  /* ----- Panels / Cards ----- */
+  .tip-box { background: var(--panel-bg); border-radius: 10px; padding: 14px; box-shadow: var(--shadow-1); }
+  .modal { width: min(780px, 94%); background: white; border-radius: 10px; padding: 18px; box-shadow: var(--shadow-2); }
+
+  /* Generic card */
+  .card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(6px);
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow-1);
+  }
+
+  /* ----- Map ----- */
+  #map {
+    height: 400px;
+    width:100%;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+    position: relative;
+    z-index: 0; /* We intentionally keep map lower so UI popovers can sit above */
+  }
+
+  /* Leaflet containers: be explicit to avoid stacking surprises */
+  .leaflet-container {
+    z-index: 0 !important;
+    background: transparent;
+  }
+  .leaflet-pane, .leaflet-overlay-pane, .leaflet-shadow-pane, .leaflet-marker-pane {
+    z-index: 0 !important;
+  }
+
+  /* ----- Dropdown (complete styles & fixes) ----- */
+  .surface-dropdown { position: relative; display: inline-block; width: 100%; z-index: 10010; }
+  .surface-dropdown-btn {
+    width: 100%;
+    text-align: left;
+    background: white;
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: box-shadow .12s ease, transform .08s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .surface-dropdown-btn:focus { outline: 3px solid rgba(99,102,241,0.12); }
+
+  .surface-dropdown-menu {
+    position: absolute;
+    z-index: 10020; /* HIGHER than Leaflet panes so it won't be hidden */
+    left: 0; right: 0;
+    background: white;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    border-radius: 8px;
+    margin-top: 6px;
+    padding: 8px;
+    max-height: 260px;
+    overflow: auto;
+    pointer-events: auto; /* ensure menu captures pointer events */
+  }
+
+  .surface-item { display:flex; align-items:center; gap:10px; padding:10px 8px; border-radius:6px; cursor:pointer; user-select:none; }
+  .surface-item:hover, .surface-item:focus { background: rgba(0,0,0,0.03); outline: none; }
+  .surface-item input[type="checkbox"] { width:16px; height:16px; margin:0; accent-color: var(--accent-green); }
+  .surface-item .label { font-size:13px; color:#111827; }
+  .surface-note { font-size:12px; color:var(--muted); margin-top:6px; padding: 0 6px; }
+
+  /* Provide keyboard focus style for checkbox rows */
+  .surface-item[tabindex="0"]:focus { box-shadow: inset 0 0 0 2px rgba(16,185,129,0.07); }
+
+  /* Small screens: make menu position static (so it expands below button naturally) */
+  @media (max-width:520px) {
+    .surface-dropdown-menu { position: static; margin-top:8px; box-shadow: 0 6px 16px rgba(0,0,0,0.10); }
+  }
+
+  /* ----- Inputs ----- */
+  input[type="number"], select, textarea {
+    border: 1px solid #e5e7eb;
+    padding: .6rem .75rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.78);
+    min-height: 44px;
+  }
+  input[type="number"]:focus, select:focus, textarea:focus { outline: 3px solid rgba(99,102,241,0.12); }
+
+  /* ----- Buttons ----- */
+  button {
+    font-family: inherit;
+  }
+  .btn {
+    display:inline-flex; align-items:center; gap:8px; padding:.6rem .9rem; border-radius:10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  }
+  .btn-primary { background: var(--accent-green); color: white; border: none; }
+  .btn-ghost { background: white; color: #111827; border: 1px solid #e5e7eb; }
+
+  /* ----- Modal backdrop ----- */
+  .modal-backdrop { position: fixed; inset:0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:10040; }
+  .modal { max-width: 780px; width: 100%; border-radius: 10px; }
+
+  /* ----- Forms & small helper text ----- */
+  label { color: #111827; font-weight: 500; }
+  .muted { color: var(--muted); font-size: 13px; }
+
+  /* ----- Analysis / Result area ----- */
+  #analysisResult { color: #111827; }
+  #designCard, #outputCard { min-height: 90px; }
+
+  /* ----- Footer ----- */
+  footer { position: relative; z-index: 10020; }
+
+  /* ----- Accessibility: reduce motion ----- */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  /* ----- Utility ----- */
+  .hidden { display:none !important; }
+  .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
+
+  /* ----- Extra defensive rule if any parent has overflow: hidden (ensures popover not clipped) -----
+     If you still see clipping, consider moving the menu into document.body via JS (code I provided earlier). */
+  .no-clip { overflow: visible !important; }
+
+</style>
+
 </head>
 <body class="text-gray-800 min-h-screen flex flex-col">
 
