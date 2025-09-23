@@ -1,5 +1,5 @@
-// dashboard.js — updated to support optional open-space polygon, geometry-based channel length,
-// Manning velocity formula, horizontal+vertical pipe length, and best-fit filter selection.
+// dashboard.js — complete ready-to-paste frontend file
+// Requires: leaflet, leaflet-draw, turf, html2canvas, jsPDF (included in your HTML)
 
 // ----------------- ELEMENTS -----------------
 const analyzeBtn = document.getElementById("analyzeBtn");
@@ -20,7 +20,6 @@ const groundSurfaceSelect = document.getElementById("groundSurfaceSelect");
 const API_BASE = (location.hostname === 'localhost') ? 'http://localhost:10000' : '';
 const token = localStorage.getItem("token");
 if (!token) {
-  // if you want to allow anonymous, comment this out
   window.location.href = "auth.html";
 }
 userName.textContent = localStorage.getItem("userName") || "User";
@@ -30,7 +29,7 @@ const DEFAULTS = {
   avgFloorHeight: 3.0,
   velocity_m_s: 2.5,
   wetMonths: 4,
-  safetyFactorFilter: 0.8,
+  safetyFactorFilter: 1.5, // <-- conservative fixed safety factor
   pit_cost_per_m3: 800
 };
 
@@ -53,38 +52,31 @@ const esriLabels = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/se
 });
 osm.addTo(map);
 
-map.on('zoomend', () => {
-  const z = map.getZoom();
-  if (z >= 14 && z <= 20) {
-    if (!map.hasLayer(esriSat)) {
-      if (map.hasLayer(osm)) map.removeLayer(osm);
-      esriSat.addTo(map);
-      esriLabels.addTo(map);
-    }
-  } else {
-    if (!map.hasLayer(osm)) {
-      if (map.hasLayer(esriSat)) map.removeLayer(esriSat);
-      if (map.hasLayer(esriLabels)) map.removeLayer(esriLabels);
-      osm.addTo(map);
-    }
-  }
-});
-
-// Draw control (polygons)
+// Draw group
 const drawnGroup = new L.FeatureGroup();
 map.addLayer(drawnGroup);
-const drawControl = new L.Control.Draw({
-  draw: {
-    polygon: { allowIntersection: false, showArea: true },
-    polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false
-  },
-  edit: { featureGroup: drawnGroup }
-});
-map.addControl(drawControl);
 
-// We'll keep explicit references to roof and ground layers
-let roofLayer = null;
-let groundLayer = null;
+// We'll use dynamic draw control so shapeOptions can change when drawing roof vs ground
+let drawControl = null;
+function styleRoofShape() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.22 }; }
+function styleGroundShape() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.22 }; }
+
+function installDrawControl(isGround) {
+  if (drawControl) map.removeControl(drawControl);
+  drawControl = new L.Control.Draw({
+    draw: {
+      polygon: {
+        allowIntersection: false,
+        showArea: true,
+        shapeOptions: isGround ? styleGroundShape() : styleRoofShape()
+      },
+      polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false
+    },
+    edit: { featureGroup: drawnGroup }
+  });
+  map.addControl(drawControl);
+}
+installDrawControl(false); // start for roof drawing
 
 // turf helper
 function latlngsToTurfPolygon(latlngs) {
@@ -95,6 +87,7 @@ function latlngsToTurfPolygon(latlngs) {
   return turf.polygon([coords]);
 }
 
+// helper area calc (returns m^2)
 function calculateAreaOfLayer(layer) {
   try {
     const latlngs = layer.getLatLngs ? layer.getLatLngs()[0] : null;
@@ -109,63 +102,56 @@ function calculateAreaOfLayer(layer) {
         const fallback = L.GeometryUtil.geodesicArea(latlngs);
         return Math.round(fallback);
       }
-    } catch (e) { }
+    } catch (e) {}
     return 0;
   }
 }
 
-// style helpers
-function styleForRoof() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.2 }; }
-function styleForGround() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.2 }; }
+// track roof/ground layers
+let roofLayer = null;
+let groundLayer = null;
 
-// Manage draw created event: assign polygons to roof/ground based on includeOpenSpace and current state
+function styleForRoof() { return { color: "#1E40AF", fillColor: "#60A5FA", fillOpacity: 0.22 }; }
+function styleForGround() { return { color: "#B45309", fillColor: "#FDBA74", fillOpacity: 0.22 }; }
+
 map.on(L.Draw.Event.CREATED, (e) => {
   const layer = e.layer;
-  // decide role
   const includeGround = !!includeOpenSpaceCheckbox?.checked;
   if (!includeGround) {
-    // clear existing and assign to roof only
     if (roofLayer) drawnGroup.removeLayer(roofLayer);
     if (groundLayer) { drawnGroup.removeLayer(groundLayer); groundLayer = null; }
     roofLayer = layer;
     if (layer.setStyle) layer.setStyle(styleForRoof());
     drawnGroup.addLayer(layer);
+    installDrawControl(false);
   } else {
-    // allow two polygons: first drawn -> roof, second drawn -> ground
     if (!roofLayer) {
       roofLayer = layer;
       if (layer.setStyle) layer.setStyle(styleForRoof());
       drawnGroup.addLayer(layer);
-    } else if (!groundLayer) {
-      groundLayer = layer;
-      if (layer.setStyle) layer.setStyle(styleForGround());
-      drawnGroup.addLayer(layer);
+      // after roof drawn, switch draw tool to ground style
+      installDrawControl(true);
     } else {
-      // both exist: replace ground by the new layer (so user can re-draw the ground)
-      drawnGroup.removeLayer(groundLayer);
+      if (groundLayer) drawnGroup.removeLayer(groundLayer);
       groundLayer = layer;
       if (layer.setStyle) layer.setStyle(styleForGround());
       drawnGroup.addLayer(layer);
+      // keep drawing for replacements - keep ground style
+      installDrawControl(true);
     }
   }
-  // update displayed areas
   updateAreaDisplays();
 });
 
-// Handle edit event (recalculate areas)
-map.on(L.Draw.Event.EDITED, (e) => { updateAreaDisplays(); });
-
-// When layers are deleted via the edit toolbar, clear refs
+map.on(L.Draw.Event.EDITED, (e) => updateAreaDisplays());
 map.on(L.Draw.Event.DELETED, (e) => {
-  const layers = e.layers;
-  layers.eachLayer((ly) => {
+  e.layers.eachLayer((ly) => {
     if (roofLayer && ly === roofLayer) roofLayer = null;
     if (groundLayer && ly === groundLayer) groundLayer = null;
   });
   updateAreaDisplays();
 });
 
-// update area spans and UI visibility
 function updateAreaDisplays() {
   const roofArea = roofLayer ? calculateAreaOfLayer(roofLayer) : 0;
   const groundArea = groundLayer ? calculateAreaOfLayer(groundLayer) : 0;
@@ -181,18 +167,31 @@ function updateAreaDisplays() {
   }
 }
 
-// When includeOpenSpace toggled off, remove ground poly & UI
+// when toggling includeOpenSpace, adjust draw control and layers
 includeOpenSpaceCheckbox?.addEventListener('change', (e) => {
   if (!includeOpenSpaceCheckbox.checked) {
     if (groundLayer) {
       drawnGroup.removeLayer(groundLayer);
       groundLayer = null;
     }
+    installDrawControl(false);
     updateAreaDisplays();
   } else {
-    alert("Open-space enabled. Draw roof polygon first, then draw ground polygon (a different color).");
+    // user enabled ground drawing — if roof exists, switch to ground style
+    if (roofLayer) installDrawControl(true);
+    // show nicer tip (non-blocking)
+    showInlineTip("Open-space enabled: draw roof first, then draw ground (orange).");
   }
 });
+
+// small inline tip function
+function showInlineTip(msg, ttl = 4500) {
+  const tip = document.createElement('div');
+  tip.className = "fixed bottom-6 right-6 bg-white/95 p-3 rounded shadow-lg z-50";
+  tip.innerHTML = `<div style="font-size:13px">${msg}</div>`;
+  document.body.appendChild(tip);
+  setTimeout(() => tip.remove(), ttl);
+}
 
 // ----------------- LOCATION helpers -----------------
 function showLocationMeta(loc) {
@@ -220,7 +219,12 @@ function populateLocationSelect(options = [], chosenLocation = null) {
     opt.value = idStr;
     opt.textContent = loc.address || (loc.lat !== undefined && loc.lng !== undefined ? `${loc.lat}, ${loc.lng}` : `Location ${i+1}`);
     opt.dataset.loc = JSON.stringify({
-      id: idStr, address: loc.address || null, lat: loc.lat ?? null, lng: loc.lng ?? null, raw: loc.raw ?? null, distance_m: loc.distance_m ?? null
+      id: idStr,
+      address: loc.address || null,
+      lat: loc.lat ?? null,
+      lng: loc.lng ?? null,
+      raw: loc.raw ?? null,
+      distance_m: loc.distance_m ?? null
     });
     locationSelect.appendChild(opt);
   });
@@ -248,7 +252,6 @@ function populateLocationSelect(options = [], chosenLocation = null) {
   }
 }
 
-// load location options (tries with auth then fallback)
 async function loadLocationOptions() {
   if (!locationSelect) return;
   const userId = localStorage.getItem('userId') || '';
@@ -338,7 +341,7 @@ loadLocationOptions();
 
 // ----------------- ANALYSIS (call backend) -----------------
 
-// mapping of ground surface option keys to impermeability midpoints (derived from provided table)
+// mapping of ground surface option keys to impermeability midpoints
 const GROUND_IMPERMEABILITY = {
   water_tight: 0.825, asphalt: 0.875, stone_brick: 0.8, open_joints: 0.6,
   inferior_blocks: 0.45, macadam: 0.425, gravel: 0.225, unpaved: 0.2, parks: 0.15, dense_built: 0.8
@@ -362,7 +365,7 @@ analyzeBtn.addEventListener("click", async () => {
   analysisResult.classList.remove("hidden");
   analysisResult.innerHTML = `<p class="text-lg text-gray-500">🔄 Running analysis...</p>`;
 
-  // get coords: prefer dropdown selection, else polygon centroid
+  // coords: prefer dropdown selection, else polygon centroid
   let lat = NaN, lng = NaN;
   if (locationSelect && locationSelect.selectedOptions.length > 0) {
     const opt = locationSelect.selectedOptions[0];
@@ -375,15 +378,15 @@ analyzeBtn.addEventListener("click", async () => {
   }
   if ((isNaN(lat) || isNaN(lng)) && drawnGroup.getLayers().length > 0) {
     try {
-      const centerLayer = roofLayer || drawnGroup.getLayers()[0];
-      if (centerLayer && typeof centerLayer.getBounds === "function") {
-        const c = centerLayer.getBounds().getCenter();
+      const layer = roofLayer || drawnGroup.getLayers()[0];
+      if (layer && typeof layer.getBounds === "function") {
+        const c = layer.getBounds().getCenter();
         lat = Number(c.lat); lng = Number(c.lng);
       }
     } catch (err) { console.warn("Could not determine polygon center", err); }
   }
 
-  // required inputs
+  // inputs
   const dwellers = (() => {
     const v = document.getElementById("dwellersInput")?.value ?? '';
     return v.toString().trim() === '' ? NaN : Number(v);
@@ -392,7 +395,6 @@ analyzeBtn.addEventListener("click", async () => {
   const roofTypeEl = document.getElementById("roofTypeInput") || document.getElementById("roofType");
   const roofType = (roofTypeEl && roofTypeEl.value) ? roofTypeEl.value : null;
 
-  // floors from UI (must be integer >=0)
   let floors = NaN;
   const floorsEl = document.getElementById("floors");
   if (floorsEl) {
@@ -401,7 +403,6 @@ analyzeBtn.addEventListener("click", async () => {
     if (!isNaN(parsed) && parsed >= 0) floors = Math.floor(parsed);
   }
 
-  // soil from UI if present
   const soilEl = document.getElementById("soilType");
   const soilType = soilEl ? (soilEl.value || null) : null;
 
@@ -418,14 +419,14 @@ analyzeBtn.addEventListener("click", async () => {
     }
   }
 
-  // validation (backend expects lat, lng, roofArea, roofType, dwellers, floors)
+  // validate required
   if (isNaN(lat) || isNaN(lng) || isNaN(roofArea) || !roofType || isNaN(dwellers) || isNaN(floors)) {
     analysisResult.innerHTML = `<p class="text-red-600">❌ Missing or invalid fields. Required: lat, lng, roofArea, roofType, dwellers, floors</p>`;
     console.warn("Missing inputs for /api/calc", { lat, lng, roofArea, roofType, dwellers, floors });
     return;
   }
 
-  // compute effective ground runoff coefficient (average of selected keys)
+  // compute groundRunoffCoeff (average of selected)
   let groundRunoffCoeff = null;
   if (includeGround) {
     const vals = groundSelections.map(k => (GROUND_IMPERMEABILITY[k] ?? null)).filter(v => v !== null);
@@ -436,11 +437,11 @@ analyzeBtn.addEventListener("click", async () => {
     }
   }
 
-  // prepare polygons: arrays of {lat,lng}
+  // polygons to arrays
   const roofPolygon = (roofLayer && typeof roofLayer.getLatLngs === 'function') ? roofLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
   const groundPolygon = (groundLayer && typeof groundLayer.getLatLngs === 'function') ? groundLayer.getLatLngs()[0].map(p => ({ lat: p.lat, lng: p.lng })) : null;
 
-  // build payload
+  // payload always sends safetyFactorFilter (conservative)
   const payload = {
     lat, lng, roofArea, roofType, dwellers, floors,
     avgFloorHeight: DEFAULTS.avgFloorHeight,
@@ -493,18 +494,11 @@ analyzeBtn.addEventListener("click", async () => {
           ${(coverageRatio !== null ? ((coverageRatio >= 0.25) ? "YES" : "NO") : (data.feasibility === true || data.feasibility === 'YES' ? "YES" : "NO"))}
         </span>
       </p>
-      <p class="mt-2">Estimated Harvesting Capacity: 
-        <span class="font-bold">${Number(litersPerYear || 0).toLocaleString()} Liters/year</span>
-      </p>
-      <p class="mt-2">Estimated Cost: 
-        <span class="font-bold text-yellow-700">₹${Number(estimatedCost || 0).toLocaleString()}</span>
-      </p>
-      <p class="mt-2">Water Sufficiency: 
-        <span class="font-bold">${suffMonths !== null ? suffMonths : (coverageRatio ? Math.round(coverageRatio * 12) : "N/A")} months</span>
-      </p>
-      <p class="mt-2">Suggestion: 
-        <span class="font-bold text-blue-600">${suggestionUI}</span>
-      </p>
+      <p class="mt-2">Annual Rainfall: <strong>${data.rainfall_mm ?? data.rainfall ?? 'N/A'}</strong> mm/year</p>
+      <p class="mt-2">Estimated Harvesting Capacity: <span class="font-bold">${Number(litersPerYear || 0).toLocaleString()} Liters/year</span></p>
+      <p class="mt-2">Estimated Cost: <span class="font-bold text-yellow-700">₹${Number(estimatedCost || 0).toLocaleString()}</span></p>
+      <p class="mt-2">Water Sufficiency: <span class="font-bold">${suffMonths !== null ? suffMonths : (coverageRatio ? Math.round(coverageRatio * 12) : "N/A")} months</span></p>
+      <p class="mt-2">Suggestion: <span class="font-bold text-blue-600">${suggestionUI}</span></p>
     `;
 
     // design card
@@ -524,6 +518,9 @@ analyzeBtn.addEventListener("click", async () => {
           <li><strong>Recommended pipe:</strong> ${pipeName}</li>
           <li><strong>Pit volume (m³):</strong> ${pitVol}</li>
           <li><strong>Aquifer:</strong> ${aquiferType}</li>
+          <li><strong>Channel length (m):</strong> ${data.channel?.channel_length_m ?? "N/A"}</li>
+          <li><strong>Channel cost (INR):</strong> ${data.channel?.channel_cost ? "₹" + Number(data.channel.channel_cost).toLocaleString() : "N/A"}</li>
+          <li><strong>Filter safety factor used:</strong> ${DEFAULTS.safetyFactorFilter}</li>
         </ul>
       </details>
     `;
@@ -554,7 +551,7 @@ analyzeBtn.addEventListener("click", async () => {
       </div>
     `;
 
-    // wire PDF button (pass reportData with server)
+    // wire PDF button
     document.getElementById("downloadReportBtn").addEventListener("click", async () => {
       const reportData = {
         district: (locationSelect.selectedOptions[0] && locationSelect.selectedOptions[0].dataset.loc) ? JSON.parse(locationSelect.selectedOptions[0].dataset.loc).address : "",
@@ -628,7 +625,7 @@ async function generatePDF(reportData) {
   const roofType = reportData.roofType || safe(server, "inputs.roofType") || safe(server, "roofType");
   const dwellers = reportData.dwellers ?? safe(server, "inputs.dwellers") ?? safe(server, "dwellers");
   const floors = safe(server, "inputs.floors", reportData.floors ?? "N/A");
-  const soilType = safe(server, "inputs.soilType") || reportData.soilType || "N/A";
+  const soilType = safe(server, "inputs.soilType", reportData.soilType || "N/A");
 
   const rainfall_mm = reportData.rainfall_mm ?? safe(server, "rainfall_mm") ?? safe(server, "rainfall") ?? "N/A";
   const runoff_lpy = safe(server, "runoff_liters_per_year", safe(server, "litersPerYear", safe(server, "runoff", 0)));
@@ -744,8 +741,8 @@ async function generatePDF(reportData) {
     ["Floor height (m)", safe(server, "inputs.avgFloorHeight", "3.0")],
     ["Velocity (m/s)", safe(server, "inputs.velocity_m_s", "2.5")],
     ["Wet months used", safe(server, "inputs.wetMonths", "4")],
-    ["Filter safety factor", safe(server, "inputs.safetyFactorFilter", "0.8")],
-    ["Pit cost (INR/m³)", safe(server, "inputs.pit_cost_per_m3", "800")]
+    ["Filter safety factor", safe(server, "inputs.safetyFactorFilter", DEFAULTS.safetyFactorFilter)],
+    ["Pit cost (INR/m³)", safe(server, "inputs.pit_cost_per_m3", DEFAULTS.pit_cost_per_m3)]
   ];
   for (const a of assumptions) { doc.text(`${a[0]}: ${fmt(a[1])}`, margin, y); y += lineH; }
   y += 8;

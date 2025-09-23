@@ -15,8 +15,10 @@
     body { font-family: 'Inter', sans-serif; background: url('back.jpeg') no-repeat center center fixed; background-size: cover; }
     h1, h2, h3 { font-family: 'Poppins', sans-serif; }
     #map { height: 400px; border-radius: 12px; }
-    /* tutorial box */
-    .tip-box { background: rgba(255,255,255,0.85); border-radius: 8px; padding: 12px; }
+    .tip-box { background: rgba(255,255,255,0.92); border-radius: 10px; padding: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+    /* simple modal */
+    .modal-backdrop { position: fixed; inset:0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:50; }
+    .modal { width: min(780px, 94%); background: white; border-radius: 10px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
   </style>
 </head>
 <body class="text-gray-800 min-h-screen flex flex-col">
@@ -37,122 +39,105 @@
   </div>
 </nav>
 
-<!-- Dashboard Content -->
 <main class="flex-1 px-8 py-10">
-  <h1 class="text-3xl font-bold text-white mb-8">Welcome, <span id="userName">User</span> 👋</h1>
+  <h1 class="text-3xl font-bold text-white mb-4">Welcome, <span id="userName">User</span> 👋</h1>
 
-  <!-- Quick Tips -->
+  <!-- Small "Show tutorial" button -->
+  <div class="mb-4">
+    <button id="showTutorial" class="px-3 py-2 rounded-md bg-white/90 text-green-700 font-medium shadow-sm hover:scale-105 transition">Show Quick Tutorial</button>
+  </div>
+
+  <!-- Quick Tips inline -->
   <section class="mb-6">
     <div class="tip-box">
-      <h3 class="text-lg font-semibold">Quick Tips — How to draw & analyze</h3>
-      <ol class="mt-2 text-sm list-decimal list-inside text-gray-700">
-        <li>Decide whether to include the open-space / courtyard by checking <strong>Include open-space</strong>.</li>
-        <li>Draw the <strong>Roof polygon first</strong> (blue). Use the draw tool, then click corners. Finish polygon to compute roof area.</li>
-        <li>If open-space is enabled, draw the <strong>Ground polygon next</strong> (orange). Draw separately — each polygon is independent and editable.</li>
-        <li>Select one or more surface types for the ground; we average their impermeability midpoints to compute ground runoff coefficient.</li>
-        <li>Click <strong>Run Feasibility Analysis</strong>. The report will include roof-only, ground-only (if chosen) and combined calculations.</li>
-        <li>Want precise channel length to pit? After this you can choose a pit location and we will compute exact shortest distance (future enhancement).</li>
-      </ol>
+      <h3 class="text-lg font-semibold">Quick Tips — draw & analyze (short)</h3>
+      <div class="mt-2 text-sm">
+        <strong>1)</strong> Draw your <span class="text-blue-600 font-semibold">roof polygon</span> first. Finish the polygon to compute area.<br>
+        <strong>2)</strong> If including ground/open-space, check the include box, then draw an <span class="text-orange-600 font-semibold">open-space polygon</span> (a different color). Draw roof first.<br>
+        <strong>3)</strong> Choose surface types (you may pick multiple). We average them to calculate ground runoff coefficient.<br>
+        <strong>4)</strong> Analysis uses a conservative filter safety factor = <strong>1.5</strong>. Report lists rainfall, coefficients, areas and all numbers.
+      </div>
     </div>
   </section>
 
-  <!-- Step 1: Input -->
-  <section class="mb-12">
-    <h2 class="text-2xl font-semibold text-white mb-4">1. Input</h2>
+  <!-- Input grid -->
+  <section class="mb-8">
+    <h2 class="text-2xl font-semibold text-white mb-4">1. Inputs</h2>
     <div class="grid md:grid-cols-2 gap-6">
-      <!-- Location -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Location</label>
-        <select id="locationSelect" 
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
+        <select id="locationSelect" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
           <option value="">Loading locations…</option>
         </select>
         <p id="locationMeta" class="mt-2 text-sm text-gray-700 hidden"></p>
       </div>
 
-      <!-- Number of Dwellers -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Number of Dwellers</label>
-        <input type="number" id="dwellersInput" placeholder="e.g. 5" min="0"
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
+        <input type="number" id="dwellersInput" placeholder="e.g. 5" min="0" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
       </div>
 
-      <!-- Roof Type Dropdown -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Roof Type</label>
-        <select id="roofTypeInput" 
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
+        <select id="roofTypeInput" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
           <option value="Concrete">Concrete</option>
           <option value="Metal">Metal</option>
         </select>
       </div>
 
-      <!-- Floors (new) -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
-        <label class="block text-sm font-medium text-gray-700">Floors (number)</label>
-        <input type="number" id="floors" placeholder="e.g. 1" min="0" value="1"
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
+        <label class="block text-sm font-medium text-gray-700">Floors</label>
+        <input type="number" id="floors" placeholder="e.g. 1" min="0" value="1" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
         <p class="mt-2 text-xs text-gray-600">Used to compute vertical pipe length = floors × floor height.</p>
       </div>
 
-      <!-- Soil Type (new) -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
         <label class="block text-sm font-medium text-gray-700">Soil Type</label>
-        <select id="soilType"
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
+        <select id="soilType" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
           <option value="loamy" selected>Loamy</option>
           <option value="sandy">Sandy</option>
           <option value="clayey">Clayey</option>
         </select>
-        <p class="mt-2 text-xs text-gray-600">Soil affects infiltration fraction used for pit sizing.</p>
       </div>
 
-      <!-- Include open-space -->
+      <!-- open-space inclusion -->
       <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow col-span-2">
         <label class="inline-flex items-center space-x-3">
-          <input id="includeOpenSpace" type="checkbox" class="rounded border-gray-300 text-green-600 shadow-sm focus:ring-green-500">
-          <span class="text-sm font-medium text-gray-700">Include open-space / courtyard in calculation</span>
+          <input id="includeOpenSpace" type="checkbox" class="rounded border-gray-300">
+          <span class="text-sm font-medium text-gray-700">Include open-space / courtyard</span>
         </label>
-        <p class="mt-2 text-xs text-gray-600">If checked, draw a second polygon (ground/open area) and choose surface types below.</p>
+        <p class="mt-2 text-xs text-gray-600">If enabled: draw a ground polygon (after roof) and pick surface types below.</p>
 
-        <!-- Ground surface type multi-select -->
         <label class="block mt-4 text-sm font-medium text-gray-700">Open-space Surface Types (choose one or more)</label>
-        <select id="groundSurfaceSelect" multiple size="5"
-          class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70 backdrop-blur-sm 
-                 focus:ring-2 focus:ring-green-500 outline-none">
-          <option value="water_tight">Water tight surface (very impervious)</option>
-          <option value="asphalt">Asphaltic pavement</option>
-          <option value="stone_brick">Stone/brick with tight joints</option>
-          <option value="open_joints">Stone/brick w/ open or uncemented joints</option>
-          <option value="inferior_blocks">Inferior block pavements (open joints)</option>
-          <option value="macadam">Macadamized road</option>
-          <option value="gravel">Gravel road/walks</option>
-          <option value="unpaved">Unpaved / vacant lots</option>
-          <option value="parks">Parks / lawns / meadows</option>
-          <option value="dense_built">Most densely populated / built-up</option>
+        <select id="groundSurfaceSelect" multiple size="6" class="w-full mt-2 px-4 py-2 border rounded-lg bg-white/70">
+          <option value="water_tight">Water-tight / Very Impervious (≈ 0.70–0.95)</option>
+          <option value="asphalt">Asphalt pavement (≈ 0.85–0.90)</option>
+          <option value="stone_brick">Stone / brick with tight joints (≈ 0.75–0.85)</option>
+          <option value="open_joints">Stone / brick — open/uncemented joints (≈ 0.50–0.70)</option>
+          <option value="inferior_blocks">Inferior block pavements (open joints) (≈ 0.40–0.50)</option>
+          <option value="macadam">Macadamized roadways (≈ 0.25–0.60)</option>
+          <option value="gravel">Gravel roads / walks (≈ 0.15–0.30)</option>
+          <option value="unpaved">Unpaved / vacant lot (≈ 0.10–0.30)</option>
+          <option value="parks">Parks / lawns / meadows (≈ 0.05–0.25)</option>
+          <option value="dense_built">Dense built-up surfaces (≈ 0.70–0.90)</option>
         </select>
-        <p class="mt-2 text-xs text-gray-600">Selected types are averaged to compute an effective runoff coefficient for the ground.</p>
+        <p class="mt-2 text-xs text-gray-600">We average selected types to compute effective ground runoff coefficient.</p>
       </div>
     </div>
   </section>
 
-  <!-- Step 2: Map -->
-  <section class="mb-12">
+  <!-- Map + draw -->
+  <section class="mb-10">
     <h2 class="text-2xl font-semibold text-white mb-4">2. Mark Your Roof (and Open Space)</h2>
     <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow">
       <div id="map"></div>
-      <p class="mt-3 text-sm text-gray-700">Draw polygon(s) on the map. If open-space is enabled, draw roof polygon first, then ground polygon. You can edit polygons using the edit tool.</p>
+      <p class="mt-3 text-sm text-gray-700">Draw polygons. Draw roof first, finish it, then draw ground (if included).</p>
       <p class="mt-2 font-semibold text-blue-600">Roof Area: <span id="roofArea">0</span> m²</p>
       <p class="mt-1 font-semibold text-orange-600 hidden" id="groundAreaWrap">Ground Area: <span id="groundArea">0</span> m²</p>
     </div>
   </section>
 
-  <!-- Step 3: Analysis -->
+  <!-- Analysis -->
   <section class="mb-12">
     <h2 class="text-2xl font-semibold text-white mb-4">3. Analysis</h2>
     <div class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow flex flex-col items-center">
@@ -163,32 +148,71 @@
     </div>
   </section>
 
-  <!-- Step 4: Design -->
   <section class="mb-12">
     <h2 class="text-2xl font-semibold text-white mb-4">4. Design Suggestions</h2>
     <div id="designCard" class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow hidden"></div>
   </section>
 
-  <!-- Step 5: Output -->
   <section>
     <h2 class="text-2xl font-semibold text-white mb-4">5. Impact Report</h2>
     <div id="outputCard" class="p-6 bg-white/40 backdrop-blur-lg rounded-2xl shadow hidden text-center"></div>
   </section>
 </main>
 
-<!-- Footer -->
 <footer class="bg-gray-900/70 backdrop-blur-md text-gray-200 text-center py-6">
-  <p>&copy; We’re actively working on — Open space inclusion, including 2D/3D visualization, groundwater analysis, and the remaining promised features — to make JalRakshak a truly end-to-end water sustainability platform.</p>
+  <p>&copy; JalRakshak — working towards practical water sustainability tools.</p>
 </footer>
 
-<!-- Turf.js -->
+<!-- libs -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<!-- html2canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-<!--app script -->
+<!-- app logic -->
 <script src="dashboard.js"></script>
+
+<!-- tutorial modal template -->
+<div id="tutorialModal" class="modal-backdrop" style="display:none;">
+  <div class="modal">
+    <h3 class="text-xl font-semibold mb-2">Quick Tutorial</h3>
+    <div id="tutorialContent" class="text-sm text-gray-700">
+      <!-- content filled by JS -->
+    </div>
+    <div class="mt-4 flex justify-between">
+      <button id="tutorialPrev" class="px-3 py-2 rounded bg-gray-100">Prev</button>
+      <div class="space-x-2">
+        <button id="tutorialClose" class="px-3 py-2 rounded bg-red-100 text-red-700">Close</button>
+        <button id="tutorialNext" class="px-3 py-2 rounded bg-green-600 text-white">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // very small tutorial flow: 4 steps
+  const tutorialSteps = [
+    "<strong>Step 1:</strong> Draw your roof polygon first (use draw tool). Finish it to compute roof area.",
+    "<strong>Step 2:</strong> If you included open-space, draw the ground polygon next (it will be orange). You can edit both with the edit tool.",
+    "<strong>Step 3:</strong> Select one or more surface types for the open-space. We average them to compute runoff coefficient.",
+    "<strong>Step 4:</strong> Click <em>Run Feasibility Analysis</em>. The PDF report will show rainfall, roof & ground areas, coefficients, costs, and the conservative filter safety factor (1.5)."
+  ];
+  let tutorialIndex = 0;
+  function showTutorialModal() {
+    tutorialIndex = 0;
+    document.getElementById('tutorialContent').innerHTML = tutorialSteps[tutorialIndex];
+    document.getElementById('tutorialModal').style.display = 'flex';
+  }
+  function closeTutorialModal() { document.getElementById('tutorialModal').style.display = 'none'; }
+  function nextTutorial() {
+    if (tutorialIndex < tutorialSteps.length - 1) { tutorialIndex++; document.getElementById('tutorialContent').innerHTML = tutorialSteps[tutorialIndex]; }
+  }
+  function prevTutorial() {
+    if (tutorialIndex > 0) { tutorialIndex--; document.getElementById('tutorialContent').innerHTML = tutorialSteps[tutorialIndex]; }
+  }
+  document.getElementById('showTutorial').addEventListener('click', showTutorialModal);
+  document.getElementById('tutorialClose').addEventListener('click', closeTutorialModal);
+  document.getElementById('tutorialNext').addEventListener('click', nextTutorial);
+  document.getElementById('tutorialPrev').addEventListener('click', prevTutorial);
+</script>
 </body>
 </html>
