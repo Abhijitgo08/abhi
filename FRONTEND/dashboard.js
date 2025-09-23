@@ -461,7 +461,7 @@ analyzeBtn.addEventListener("click", async () => {
 
   if (includeGround && groundSelections.length === 0 && groundArea > 0) {
     // if user drew ground but didn't pick surfaces, ask them
-    const any = confirm("You drew an open-space polygon but didn't select any surface types. Use default medium imperviousness?");
+    //const any = confirm("You drew an open-space polygon but didn't select any surface types. Use default medium imperviousness?");
     if (!any) {
       analysisResult.innerHTML = `<p class="text-red-600">❌ Please select at least one surface type for the ground area.</p>`;
       return;
@@ -633,11 +633,11 @@ async function generatePDF(reportData) {
     console.error("jsPDF missing");
     return;
   }
-  if (!window.html2canvas) {
-    alert("html2canvas not loaded. Confirm html2canvas script is included.");
-    console.error("html2canvas missing");
-    return;
-  }
+  //if (!window.html2canvas) {
+  //  alert("html2canvas not loaded. Confirm html2canvas script is included.");
+   // console.error("html2canvas missing");
+   // return;
+  //}
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
